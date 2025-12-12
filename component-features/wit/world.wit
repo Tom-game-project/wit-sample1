@@ -1,0 +1,7 @@
+package component:component-features;
+
+world my-world {
+	import dummy:logger/logger@0.1.0-alpha;
+    export to-upper: func(input: string) -> string;
+}
+
