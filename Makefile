@@ -10,7 +10,7 @@ else
 endif
 
 JCO_OUT_DIR = \
-			  dist/
+			  target/jco
 
 JCO_FLAGS = \
 			--base64-cutoff=99999999 \
@@ -18,7 +18,7 @@ JCO_FLAGS = \
 			--tla-compat
 
 JS_ENTRY = \
-		   main.ts
+		   index.html
 
 JS_TARGET = \
 			build.js
@@ -30,6 +30,9 @@ JS_SHIMS = \
 # guest impls
 RS_SRCS = \
 		  component-features/src/lib.rs
+
+OUT_DIR = \
+		   dist
 
 $(WASM_SRC): $(RS_SRCS)
 	cargo build $(CARGO_FLAGS)
@@ -46,13 +49,14 @@ $(JCO_OUT_DIR): $(WASM_SRC) $(JS_SHIMS)
 gen-jco:$(JCO_OUT_DIR)
 
 $(JS_TARGET): $(JS_ENTRY) gen-jco
-	npx bun build $(JS_ENTRY) --production > $(JS_TARGET)
+	npx bun build $(JS_ENTRY) --minify --production --target browser --outdir=$(OUT_DIR)
 
 bun-bundle:$(JS_TARGET)
 
 clean: 
 	rm $(JS_TARGET)
 	rm -rf $(JCO_OUT_DIR)
+	rm -rf $(OUT_DIR)
 	cargo clean
 
 .PHONY: gen-jco bun-bundle clean

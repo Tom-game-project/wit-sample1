@@ -1,7 +1,24 @@
 package component:component-features;
 
+interface example-resource {
+    resource example-list {
+        constructor();
+
+        /// 文字列を追記し、チェーンのためにビルダー自身を返す。
+        append: func(s: string);
+
+        /// 最終的に構築された文字列を返す。
+        to-string: func() -> string;
+    }
+}
+
 world my-world {
+	import dummy:logger/logger@0.1.0-alpha;
+    // export to-upper: func(input: string) -> string;
+    export example-resource;
+}
+
+world my-world2 {
 	import dummy:logger/logger@0.1.0-alpha;
     export to-upper: func(input: string) -> string;
 }
-
