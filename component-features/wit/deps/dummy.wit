@@ -2,12 +2,10 @@ package dummy:logger@0.1.0-alpha;
 
 interface logger {
 	log: func(data:string);
-	clear: func();
-	get-log: func() -> string;
 }
 
 
 world imports {
-  import logger;
+    import logger;
 }
 
