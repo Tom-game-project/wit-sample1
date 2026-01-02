@@ -10,5 +10,9 @@ wit-bindgen = { version = "0.49.0", features = [
 
 wit-bindgen-rt = { version = "0.44.0", features = ["bitflags"] }
 
+chrono = "0.4.42"
+
+shift_calendar = { path = "../work_shift_dayoff_logic" }
+
 [lib]
 crate-type = ["cdylib"]

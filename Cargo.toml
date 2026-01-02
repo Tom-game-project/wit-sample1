@@ -1,4 +1,4 @@
 [workspace]
-members = ["component-features"]
+members = ["component-features", "work_shift_dayoff_logic"]
 
 
