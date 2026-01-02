@@ -11,12 +11,11 @@ $init.then(() => {
     example_resource.append("world,");
     example_resource.append("tom,");
 
-
     let build_string = example_resource.toString();
 
     console.log(build_string);
     const button = document.getElementById('submit-btn');
-    
+
     if (button instanceof HTMLButtonElement) {
         // このブロック内では button は HTMLButtonElement 型として扱われる
         button.addEventListener('click', (event: MouseEvent) => {

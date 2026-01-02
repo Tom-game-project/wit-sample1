@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shift Manager Integration</title>
+    <style>
+        :root {
+            /* Colors */
+            --bg-color: #f4f6f8;
+            --surface: #ffffff;
+            --text-main: #333;
+            --text-sub: #666;
+            --border: #e0e0e0;
+            --primary: #4a90e2;
+            --danger: #e74c3c;
+            --header-bg: #34495e;
+            --header-text: #fff;
+            
+            /* Dimensions */
+            --nav-height: 60px;
+        }
+
+        /* --- Global Layout --- */
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            font-family: "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            overflow: hidden; /* 全体のスクロールを禁止し、ビュー内でスクロールさせる */
+        }
+
+        /* --- Navigation Bar --- */
+        .app-header {
+            height: var(--nav-height);
+            background: var(--surface);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+            z-index: 10;
+            position: relative;
+        }
+
+        .app-title {
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: var(--text-main);
+        }
+
+        /* View Switcher (Tab) */
+        .view-switcher {
+            display: flex;
+            background: #f0f2f5;
+            padding: 4px;
+            border-radius: 8px;
+        }
+
+        .view-btn {
+            border: none;
+            background: transparent;
+            padding: 8px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-sub);
+            transition: all 0.2s;
+        }
+
+        .view-btn.active {
+            background: var(--surface);
+            color: var(--primary);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .view-btn:hover:not(.active) {
+            background: rgba(0,0,0,0.05);
+        }
+
+        /* --- Main Viewport --- */
+        .main-viewport {
+            height: calc(100% - var(--nav-height));
+            position: relative;
+            width: 100%;
+            background: var(--bg-color);
+        }
+
+        /* 各ビューの共通スタイル */
+        .view-section {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%;
+            height: 100%;
+            overflow-y: auto; /* コンテンツが溢れたらスクロール */
+            padding: 20px;
+            box-sizing: border-box;
+            
+            /* 切り替えアニメーション用 */
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s;
+            background: var(--bg-color);
+        }
+
+        .view-section.active-view {
+            opacity: 1;
+            visibility: visible;
+            z-index: 1;
+        }
+
+        /* --- Container --- */
+        .container { max-width: 1400px; margin: 0 auto; padding-bottom: 40px; }
+
+        /* =========================================
+           Shared Components & Utilities (From your code)
+           ========================================= */
+        
+        /* Buttons */
+        .btn { border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em; transition: opacity 0.2s; }
+        .btn:hover { opacity: 0.9; }
+        .btn-primary { background: var(--primary); color: white; }
+        .btn-danger { background: var(--danger); color: white; }
+        .btn-outline { border: 1px solid #aaa; background: white; color: #555; }
+        .btn-sm { padding: 4px 8px; font-size: 0.8em; }
+        .section-box { margin-bottom: 40px; }
+        h2 { border-bottom: 2px solid #ccc; padding-bottom: 5px; margin-top: 10px; font-size: 1.2rem; }
+
+        /* Chips (Config Style) */
+        .chip { display: inline-block; padding: 3px 8px; margin: 2px; border-radius: 4px; font-size: 0.8em; color: white; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.1); border: 1px solid rgba(0,0,0,0.1); }
+        .chip:hover { opacity: 0.8; text-decoration: line-through; }
+
+        /* =========================================
+           Config View Styles
+           ========================================= */
+        .groups-container { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+        .group-card { background: var(--surface); padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); width: 280px; border-top: 5px solid #ccc; transition: border-color 0.3s; }
+        .group-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .group-id-badge { color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 0.85em; font-family: monospace; font-weight: bold; }
+        .group-name-input { width: 100%; padding: 8px; box-sizing: border-box; margin-bottom: 10px; border: 1px solid #ccc; border-radius: 4px; font-weight: bold; font-size: 1em; }
+        .slot-list { margin-bottom: 10px; max-height: 200px; overflow-y: auto; }
+        .slot-item { display: flex; align-items: center; gap: 5px; margin-bottom: 5px; }
+        .slot-idx { font-family: monospace; font-size: 0.8em; color: #888; width: 25px; text-align: right;}
+        .slot-input { flex: 1; padding: 4px; border: 1px solid #ddd; border-radius: 3px; font-size: 0.9em;}
+        
+        .rule-card { background: var(--surface); padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 25px; overflow-x: auto; }
+        .rule-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        
+        table.config-table { width: 100%; border-collapse: collapse; min-width: 900px; }
+        .config-table th, .config-table td { border: 1px solid var(--border); padding: 8px; vertical-align: top; text-align: center; }
+        .config-table th { background-color: #eee; font-weight: bold; }
+        .config-row-header { background-color: #fafafa; font-weight: bold; width: 80px; vertical-align: middle; }
+        
+        .add-btn-mini { display: block; width: 100%; margin-top: 5px; border: 1px dashed #ccc; background: none; color: #999; cursor: pointer; font-size: 0.8em; padding: 2px; }
+        .add-btn-mini:hover { background: #eee; color: #333; }
+        pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: monospace; }
+
+        /* =========================================
+           Calendar View Styles (From your Paste)
+           ========================================= */
+        .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; background: var(--surface); padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .month-label { font-size: 1.5rem; font-weight: bold; }
+        .nav-btn { background: none; border: 1px solid var(--border); padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 1rem; transition: background 0.2s; }
+        .nav-btn:hover { background: #eee; }
+
+        .calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--surface); box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }
+        .calendar-table th { background: #4a90e2; color: #fff; padding: 10px; text-align: center; font-weight: bold; border: 1px solid #357abd; }
+        .calendar-table td { border: 1px solid var(--border); vertical-align: top; height: 120px; /* 固定高さ */ padding: 5px; background: #fff; }
+        .calendar-table td.diff-month { background-color: #f4f4f4; color: #ccc; }
+
+        .date-label { display: block; text-align: right; font-size: 0.9em; margin-bottom: 5px; font-weight: bold; color: var(--text-sub); }
+        .today .date-label { color: var(--primary); text-decoration: underline; }
+
+        .shift-section { margin-bottom: 4px; font-size: 0.8em; }
+        .shift-label { font-size: 0.7em; text-transform: uppercase; color: #999; font-weight: bold; margin-bottom: 2px; border-bottom: 1px solid #eee; }
+
+        /* Calendar Chip Style (Large) */
+        .staff-chip { 
+            display: inline-block; font-size: 1.25em; padding: 2px 6px; margin: 1px; border-radius: 4px; 
+            background: #eee; color: #333; border-left: 4px solid #999; white-space: nowrap; 
+            overflow: hidden; text-overflow: ellipsis; max-width: 100%; box-sizing: border-box; cursor: default; 
+        }
+        .staff-chip:hover { opacity: 0.8; }
+
+
+        /* =========================================
+           Modal
+           ========================================= */
+        .modal { display: none; position: fixed; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
+        .modal-content { background: white; padding: 20px; border-radius: 8px; width: 400px; max-height: 80vh; overflow-y: auto; }
+        .modal-section-title { margin-top: 0; margin-bottom: 15px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+        .selection-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .selection-btn { padding: 10px 5px; background: #fff; border: 1px solid #eee; border-left-width: 6px; border-left-style: solid; cursor: pointer; border-radius: 4px; text-align: center; font-size: 0.9em; font-weight: bold; color: #555; box-shadow: 0 1px 2px rgba(0,0,0,0.05); transition: transform 0.1s, box-shadow 0.1s; }
+        .selection-btn:hover { transform: translateY(-2px); box-shadow: 0 3px 6px rgba(0,0,0,0.1); background-color: #fafafa; }
+
+        /* =========================================
+       PRINT STYLES (印刷用設定)
+       ========================================= */
+    @media print {
+        /* 1. 不要なUIパーツを消す */
+        .app-header,
+        .view-switcher,
+        .controls button, /* 前月・次月ボタン */
+        .add-btn-mini,    /* 追加ボタン */
+        .btn,             /* その他のボタン */
+        #view-config,     /* 設定画面 */
+        #modal            /* モーダル */
+        {
+            display: none !important;
+        }
+
+        /* 2. 背景色やグラフィックを強制的に印刷させる */
+        * {
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+        }
+
+        /* 3. レイアウトのリセット（スクロール禁止を解除） */
+        html, body, .main-viewport, .view-section, .container {
+            height: auto !important;
+            overflow: visible !important;
+            background: white !important;
+            display: block !important;
+            position: static !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 100% !important;
+        }
+
+        /* 4. カレンダーエリアの最適化 */
+        .calendar-wrapper {
+            box-shadow: none !important;
+            border: none !important;
+            overflow: visible !important;
+            display: block !important;
+        }
+
+        /* 5. セル内のスクロールを解除して全件表示 */
+        .cell-content-wrapper {
+            overflow: visible !important;
+            height: auto !important;
+            display: block !important;
+        }
+
+        /* 6. 用紙設定（横向き推奨）と余白調整 */
+        @page {
+            size: landscape; /* 自動で横向き印刷にする */
+            margin: 10mm;    /* 余白を少し詰める */
+        }
+
+        /* 7. 1ページに収めるための縮小ハック */
+        body {
+            /* ここを調整して1ページに収めます。
+               0.8 (80%) くらいがA4横にちょうど良いことが多いです。
+            */
+            zoom: 0.85;
+        }
+
+        /* タイトルなどを調整 */
+        .controls {
+            box-shadow: none;
+            border: none;
+            padding: 0;
+            margin-bottom: 10px;
+            justify-content: center; /* タイトルを中央へ */
+        }
+        .month-label {
+            font-size: 2rem; /* タイトルを少し大きく */
+            color: #000;
+        }
+    }
+    </style>
+</head>
+<body>
+
+<nav class="app-header">
+    <div class="app-title">
+        <span>📅 Shift Manager</span>
+    </div>
+    <div class="view-switcher">
+        <button class="view-btn active" onclick="switchView('calendar')">Viewer</button>
+        <button class="view-btn" onclick="switchView('config')">Config</button>
+    </div>
+</nav>
+
+<div class="main-viewport">
+    
+    <div id="view-calendar" class="view-section active-view">
+        <div class="container">
+            <div class="controls">
+                <div style="display:flex; gap:10px;">
+                    <button class="nav-btn" id="prev-btn">&lt; Prev</button>
+                    <button class="nav-btn" onclick="window.print()">🖨️ Print</button> </div>
+                <span class="month-label" id="current-month-label">Loading...</span>
+                <button class="nav-btn" id="next-btn">Next &gt;</button>
+            </div>
+            <div id="calendar-mount"></div>
+        </div>
+    </div>
+
+    <div id="view-config" class="view-section">
+        <div class="container">
+            <h1 style="margin-top:0;">Configuration</h1>
+            
+            <div class="section-box">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2>1. Staff Groups Definition</h2>
+                    <button id="add-group-btn" class="btn btn-primary">+ Add New Group</button>
+                </div>
+                <div id="staff-groups-container" class="groups-container"></div>
+            </div>
+
+            <div class="section-box">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2>2. Weekly Rules</h2>
+                    <button id="add-rule-btn" class="btn btn-primary">+ Add Weekly Rule</button>
+                </div>
+                <div id="rules-container"></div>
+            </div>
+
+            <div class="section-box">
+                <h2>3. JSON Output</h2>
+                <pre id="json-output"></pre>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div id="modal" class="modal">
+    <div class="modal-content">
+        <h3 class="modal-section-title">Add Slot to Schedule</h3>
+        <div id="modal-list"></div>
+        <button id="modal-cancel-btn" class="btn btn-outline" style="width:100%;">Cancel</button>
+    </div>
+</div>
+
+<script>
+    /* =========================================
+       CORE UTILITIES
+       ========================================= */
+    function el(tag, props = {}, ...children) {
+        const element = document.createElement(tag);
+        for (const [key, value] of Object.entries(props)) {
+            if (key === 'className') element.className = value;
+            else if (key === 'style' && typeof value === 'object') Object.assign(element.style, value);
+            else if (key.startsWith('on') && typeof value === 'function') element.addEventListener(key.substring(2).toLowerCase(), value);
+            else element.setAttribute(key, value);
+        }
+        children.forEach(child => {
+            if (typeof child === 'string' || typeof child === 'number') element.textContent = child;
+            else if (child instanceof Node) element.appendChild(child);
+        });
+        return element;
+    }
+
+    function getGroupColor(index) {
+        const palette = ['#e67e22', '#27ae60', '#2980b9', '#8e44ad', '#c0392b', '#16a085', '#d35400', '#2c3e50'];
+        return index < palette.length ? palette[index] : `hsl(${(index * 137.5) % 360}, 65%, 45%)`;
+    }
+
+    const getGroupPrefix = (idx) => String.fromCharCode(97 + idx); // 0->a, 1->b...
+    const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+
+
+    /* =========================================
+       APP STATE
+       ========================================= */
+    const state = {
+        // Config Data
+        staffGroups: [
+            { name: "Kitchen", slots: ["Leader", "Sub", ""] },
+            { name: "Hall", slots: ["Manager", "PartTime", ""] }
+        ],
+        rules: [
+            {
+                name: "week_rule0",
+                schedule: {
+                    mon: { m: ['a0', 'b0'], a: ['b1'] },
+                    tue: { m: [], a: ['a1'] },
+                    wed: { m: [], a: [] },
+                    thu: { m: ['a1'], a: [] },
+                    fri: { m: ['b1'], a: ['a0'] },
+                    sat: { m: [], a: [] },
+                    sun: { m: [], a: [] }
+                }
+            }
+        ],
+        // Calendar Data
+        year: 2026,
+        month: 0,
+        scheduleData: {} 
+    };
+
+
+    /* =========================================
+       VIEW CONTROLLER
+       ========================================= */
+    function switchView(viewName) {
+        document.querySelectorAll('.view-btn').forEach(btn => {
+            if (btn.innerText.toLowerCase().includes(viewName)) btn.classList.add('active');
+            else btn.classList.remove('active');
+        });
+        document.querySelectorAll('.view-section').forEach(sec => {
+            sec.classList.remove('active-view');
+        });
+        document.getElementById(`view-${viewName}`).classList.add('active-view');
+    }
+
+
+    /* =========================================
+       CONFIG LOGIC (From config.html)
+       ========================================= */
+    function renderConfig() {
+        renderGroups();
+        renderRules();
+        renderJSON();
+    }
+
+    function renderGroups() {
+        const container = document.getElementById('staff-groups-container');
+        container.replaceChildren();
+
+        state.staffGroups.forEach((group, gIdx) => {
+            const prefix = getGroupPrefix(gIdx);
+            const color = getGroupColor(gIdx);
+
+            const slotListContainer = el('div', { className: 'slot-list' });
+            group.slots.forEach((memo, sIdx) => {
+                const item = el('div', { className: 'slot-item' },
+                    el('span', { className: 'slot-idx' }, `${sIdx}:`),
+                    el('input', { 
+                        type: 'text', className: 'slot-input', value: memo, placeholder: 'Memo',
+                        oninput: (e) => updateSlotMemo(gIdx, sIdx, e.target.value)
+                    }),
+                    el('button', { className: 'btn btn-danger btn-sm', onclick: () => removeSlot(gIdx, sIdx) }, '×')
+                );
+                slotListContainer.appendChild(item);
+            });
+
+            const card = el('div', { className: 'group-card', style: { borderTopColor: color } },
+                el('div', { className: 'group-header' },
+                    el('span', { className: 'group-id-badge', style: { backgroundColor: color } }, `ID: ${prefix}`),
+                    el('button', { className: 'btn btn-danger btn-sm', onclick: () => removeGroup(gIdx) }, 'Delete')
+                ),
+                el('input', { 
+                    type: 'text', className: 'group-name-input', value: group.name, placeholder: 'Group Name',
+                    oninput: (e) => updateGroupName(gIdx, e.target.value)
+                }),
+                slotListContainer,
+                el('button', { className: 'btn btn-outline', style: { width: '100%', fontSize: '0.8em' }, onclick: () => addSlot(gIdx) }, '+ Add Slot')
+            );
+            container.appendChild(card);
+        });
+    }
+
+    function renderRules() {
+        const container = document.getElementById('rules-container');
+        container.replaceChildren();
+
+        state.rules.forEach((rule, rIdx) => {
+            const theadTr = el('tr', {}, el('th', { className: 'config-row-header' }, 'Shift'));
+            days.forEach(d => theadTr.appendChild(el('th', {}, d.toUpperCase())));
+            
+            const tbody = el('tbody');
+            ['m', 'a'].forEach(shiftType => {
+                const tr = el('tr', {});
+                tr.appendChild(el('td', { className: 'config-row-header' }, shiftType === 'm' ? 'Morning' : 'Afternoon'));
+
+                days.forEach(day => {
+                    const cell = el('td', {});
+                    rule.schedule[day][shiftType].forEach((idStr, arrIdx) => {
+                        const gPrefix = idStr.charAt(0);
+                        const sIdx = parseInt(idStr.substring(1));
+                        const gIdx = gPrefix.charCodeAt(0) - 97;
+                        
+                        const group = state.staffGroups[gIdx];
+                        const isValid = group && group.slots[sIdx] !== undefined;
+                        const label = isValid ? `${group.name} - ${sIdx}` : `${idStr} (?)`;
+                        const color = isValid ? getGroupColor(gIdx) : '#999';
+
+                        cell.appendChild(el('span', {
+                            className: 'chip', // Use Config Style Chip
+                            style: { backgroundColor: color },
+                            title: idStr,
+                            onclick: () => removeAssignment(rIdx, day, shiftType, arrIdx)
+                        }, label));
+                    });
+                    
+                    cell.appendChild(el('button', { className: 'add-btn-mini', onclick: () => openModal(rIdx, day, shiftType) }, '+'));
+                    tr.appendChild(cell);
+                });
+                tbody.appendChild(tr);
+            });
+
+            const card = el('div', { className: 'rule-card' },
+                el('div', { className: 'rule-header' },
+                    el('input', { type: 'text', style: { fontSize: '1.1em', fontWeight: 'bold' }, value: rule.name, oninput: (e) => updateRuleName(rIdx, e.target.value) }),
+                    el('button', { className: 'btn btn-danger', onclick: () => removeRule(rIdx) }, 'Delete Rule')
+                ),
+                el('table', { className: 'config-table' }, el('thead', {}, theadTr), tbody)
+            );
+            container.appendChild(card);
+        });
+    }
+
+    function renderJSON() { document.getElementById('json-output').textContent = JSON.stringify({staffGroups: state.staffGroups, rules: state.rules}, null, 2); }
+
+    // Config Actions
+    function addNewGroup() { state.staffGroups.push({ name: `Group${state.staffGroups.length + 1}`, slots: ["", ""] }); renderConfig(); }
+    function removeGroup(i) { if(confirm("Shift IDs?")) { state.staffGroups.splice(i, 1); renderConfig(); } }
+    function updateGroupName(i, v) { state.staffGroups[i].name = v; renderConfig(); }
+    function addSlot(i) { state.staffGroups[i].slots.push(""); renderConfig(); }
+    function removeSlot(g, s) { state.staffGroups[g].slots.splice(s, 1); renderConfig(); }
+    function updateSlotMemo(g, s, v) { state.staffGroups[g].slots[s] = v; renderJSON(); }
+    function addNewRule() { 
+        const s = {}; days.forEach(d=>s[d]={m:[],a:[]}); 
+        state.rules.push({name:`rule${state.rules.length}`, schedule:s}); renderConfig(); 
+    }
+    function removeRule(i) { if(confirm("Del?")) { state.rules.splice(i, 1); renderConfig(); } }
+    function updateRuleName(i, v) { state.rules[i].name = v; renderJSON(); }
+    function removeAssignment(r, d, s, i) { state.rules[r].schedule[d][s].splice(i, 1); renderConfig(); }
+
+
+    /* =========================================
+       MODAL LOGIC (Shared)
+       ========================================= */
+    let modalCtx = null;
+    const modalEl = document.getElementById('modal');
+    const modalListEl = document.getElementById('modal-list');
+
+    function openModal(rIdx, day, shift) {
+        modalCtx = { rIdx, day, shift };
+        modalListEl.replaceChildren();
+        state.staffGroups.forEach((group, gIdx) => {
+            const prefix = getGroupPrefix(gIdx);
+            const color = getGroupColor(gIdx);
+            const container = el('div', { style: { marginBottom: "20px" } },
+                el('div', { style: { color: color, fontWeight: "bold", marginBottom: "5px" } }, `${group.name} (${prefix})`)
+            );
+            const grid = el('div', { className: 'selection-grid' });
+            group.slots.forEach((_, sIdx) => {
+                const idStr = `${prefix}${sIdx}`;
+                grid.appendChild(el('div', {
+                    className: 'selection-btn', style: { borderLeftColor: color },
+                    onclick: () => confirmAssignment(idStr)
+                }, `${group.name} - ${sIdx}`));
+            });
+            container.appendChild(grid);
+            modalListEl.appendChild(container);
+        });
+        modalEl.style.display = 'flex';
+    }
+
+    function confirmAssignment(idStr) {
+        state.rules[modalCtx.rIdx].schedule[modalCtx.day][modalCtx.shift].push(idStr);
+        modalEl.style.display = 'none';
+        renderConfig();
+    }
+    document.getElementById('modal-cancel-btn').onclick = () => modalEl.style.display = 'none';
+    modalEl.onclick = (e) => { if(e.target.id === 'modal') modalEl.style.display = 'none'; };
+
+
+    /* =========================================
+       CALENDAR LOGIC (From calendar.html)
+       ========================================= */
+
+    // Mock Data Generator
+    function generateMockData(year, month) {
+        const data = {};
+        const daysInMonth = new Date(year, month + 1, 0).getDate();
+        for (let i = 1; i <= daysInMonth; i++) {
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+            const m = [], a = [];
+            // Demo data logic (same as your paste)
+            if (Math.random() > 0.2) m.push({ name: "Sato", groupIdx: 0 });
+            if (Math.random() > 0.5) m.push({ name: "Suzuki", groupIdx: 1 });
+            if (Math.random() > 0.2) a.push({ name: "Tanaka", groupIdx: 0 });
+            if (Math.random() > 0.3) a.push({ name: "Yamada", groupIdx: 1 });
+            if (Math.random() > 0.7) a.push({ name: "Kato", groupIdx: 2 });
+            data[dateStr] = { m, a };
+        }
+        return data;
+    }
+
+    console.log("generateMockData", generateMockData(2025, 11));
+
+    function initCalendarData() {
+        Object.assign(state.scheduleData, generateMockData(2025, 11));
+        Object.assign(state.scheduleData, generateMockData(2026, 0));
+        Object.assign(state.scheduleData, generateMockData(2026, 1));
+    }
+
+    function renderCalendar() {
+        const mount = document.getElementById('calendar-mount');
+        const label = document.getElementById('current-month-label');
+        const { year, month } = state;
+        
+        label.textContent = new Date(year, month, 1).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+
+        const firstDay = new Date(year, month, 1).getDay();
+        const startOffset = (firstDay === 0 ? 6 : firstDay - 1);
+        const totalDays = new Date(year, month + 1, 0).getDate();
+        
+        const thead = el('thead', {}, el('tr', {},
+            el('th', {}, 'MON'), el('th', {}, 'TUE'), el('th', {}, 'WED'),
+            el('th', {}, 'THU'), el('th', {}, 'FRI'), el('th', {}, 'SAT'),
+            el('th', {}, 'SUN')
+        ));
+
+        const tbody = el('tbody');
+        let tr = el('tr');
+        let count = 0;
+
+        for (let i = 0; i < startOffset; i++) { tr.appendChild(el('td', { className: 'diff-month' })); count++; }
+
+        const today = new Date();
+        for (let d = 1; d <= totalDays; d++) {
+            if (count % 7 === 0 && count !== 0) { tbody.appendChild(tr); tr = el('tr'); }
+            
+            const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+            const dayData = state.scheduleData[dateStr] || { m: [], a: [] };
+            
+            const cellContent = [];
+            cellContent.push(el('span', { className: 'date-label' }, d));
+
+            if (dayData.m && dayData.m.length > 0) {
+                const chips = dayData.m.map(s => el('span', { 
+                    className: 'staff-chip', // Calendar Style Chip
+                    style:{borderLeftColor:getGroupColor(s.groupIdx)}, title: s.name 
+                }, s.name));
+                cellContent.push(el('div', { className: 'shift-section' }, el('div', { className: 'shift-label' }, 'AM'), ...chips));
+            }
+            if (dayData.a && dayData.a.length > 0) {
+                const chips = dayData.a.map(s => el('span', { 
+                    className: 'staff-chip', // Calendar Style Chip
+                    style:{borderLeftColor:getGroupColor(s.groupIdx)}, title: s.name 
+                }, s.name));
+                cellContent.push(el('div', { className: 'shift-section' }, el('div', { className: 'shift-label' }, 'PM'), ...chips));
+            }
+
+            const td = el('td', {}, ...cellContent);
+            if (today.getFullYear()===year && today.getMonth()===month && today.getDate()===d) td.classList.add('today');
+            
+            tr.appendChild(td);
+            count++;
+        }
+        while (count % 7 !== 0) { tr.appendChild(el('td', { className: 'diff-month' })); count++; }
+        tbody.appendChild(tr);
+
+        mount.replaceChildren(el('table', { className: 'calendar-table' }, thead, tbody));
+    }
+
+    document.getElementById('prev-btn').onclick = () => {
+        state.month--;
+        if (state.month < 0) { state.month = 11; state.year--; }
+        renderCalendar();
+    };
+    document.getElementById('next-btn').onclick = () => {
+        state.month++;
+        if (state.month > 11) { state.month = 0; state.year++; }
+        renderCalendar();
+    };
+
+    /* =========================================
+       INIT
+       ========================================= */
+    document.getElementById('add-group-btn').onclick = addNewGroup;
+    document.getElementById('add-rule-btn').onclick = addNewRule;
+
+    initCalendarData();
+    renderConfig();
+    renderCalendar();
+
+</script>
+</body>
+</html>
