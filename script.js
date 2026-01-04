@@ -231,6 +231,7 @@ function renderGroups() {
     });
 }
 
+// 修正箇所：ここではID (idStr) をそのままラベルとして表示します
 function renderRules() {
     const container = document.getElementById('rules-container');
     container.replaceChildren();
@@ -244,10 +245,20 @@ function renderRules() {
             days.forEach(day => {
                 const cell = el('td', {});
                 rule.schedule[day][shiftType].forEach((idStr, arrIdx) => {
-                    const s = resolveStaffId(idStr);
-                    const label = s.name;
-                    const color = getGroupColor(s.groupIdx);
-                    cell.appendChild(el('span', { className: 'chip', style: { backgroundColor: color }, title: idStr, onclick: () => removeAssignment(rIdx, day, shiftType, arrIdx) }, label));
+                    // IDからグループのインデックスを特定して色を決める
+                    const gPrefix = idStr.charAt(0);
+                    const gIdx = gPrefix.charCodeAt(0) - 97;
+                    const color = getGroupColor(gIdx);
+                    
+                    // 表示は名前ではなく、IDそのもの (a0, b1 等) を使用
+                    const label = idStr; 
+                    
+                    cell.appendChild(el('span', { 
+                        className: 'chip', 
+                        style: { backgroundColor: color }, 
+                        title: idStr, 
+                        onclick: () => removeAssignment(rIdx, day, shiftType, arrIdx) 
+                    }, label));
                 });
                 cell.appendChild(el('button', { className: 'add-btn-mini', onclick: () => openModal(rIdx, day, shiftType) }, '+'));
                 tr.appendChild(cell);
@@ -290,9 +301,15 @@ function openModal(rIdx, day, shift) {
         const color = getGroupColor(gIdx);
         const container = el('div', { style: { marginBottom: "20px" } }, el('div', { style: { color: color, fontWeight: "bold", marginBottom: "5px" } }, `${group.name} (${prefix})`));
         const grid = el('div', { className: 'selection-grid' });
-        group.slots.forEach((_, sIdx) => {
+        group.slots.forEach((memo, sIdx) => {
             const idStr = `${prefix}${sIdx}`;
-            grid.appendChild(el('div', { className: 'selection-btn', style: { borderLeftColor: color }, onclick: () => confirmAssignment(idStr) }, `${group.name} - ${sIdx}`));
+            // モーダルのボタンも ID (a0など) をメインに表示し、メモがあればカッコ書きで添える形式に変更
+            const label = memo ? `${idStr}` : idStr;
+            grid.appendChild(el('div', { 
+                className: 'selection-btn', 
+                style: { borderLeftColor: color }, 
+                onclick: () => confirmAssignment(idStr) 
+            }, label));
         });
         container.appendChild(grid);
         modalListEl.appendChild(container);
@@ -310,4 +327,3 @@ document.getElementById('add-rule-btn').onclick = addNewRule;
 // Initial Render
 renderConfig();
 renderCalendar();
-

@@ -116,10 +116,14 @@ mod bindings2 {
                 calculate_weeks_delta_from_base(1970, 1, 12).unwrap()
             ));
 
+            // === 必要なデータの取得 ===
+
             // スタッフリストを取得する
             let staff_groups_form = get_staff_groups();
             // ルールを取得する
             let rules = get_week_rules();
+
+            // === データの格納 ===
 
             // ロジックに渡せるようにデータを整える
             let mut staff_group_list = StaffGroupList::new();
