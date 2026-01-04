@@ -26,6 +26,7 @@ JS_TARGET = \
 # host impls
 JS_SHIMS = \
 		   js/dummy-logger.js \
+		   js/config-mock.js \
 
 # guest impls
 RS_SRCS = \
@@ -33,6 +34,8 @@ RS_SRCS = \
 
 OUT_DIR = \
 		   dist
+
+OUT_HTML = dist/index.html
 
 $(WASM_SRC): $(RS_SRCS)
 	cargo build $(CARGO_FLAGS)
@@ -42,22 +45,26 @@ $(JCO_OUT_DIR): $(WASM_SRC) $(JS_SHIMS)
 	npx jco transpile $(WASM_SRC) \
 	-o $(JCO_OUT_DIR) \
 	$(JCO_FLAGS) \
-	--map 'dummy:logger/logger=./dummy-logger.js'
+	--map 'dummy:logger/logger=./dummy-logger.js' \
+	--map 'config-mock:config-mock/config-mock=./config-mock.js'
 	# ---
 	cp $(JS_SHIMS) $(JCO_OUT_DIR)
 
 gen-jco:$(JCO_OUT_DIR)
 
-$(JS_TARGET): $(JS_ENTRY) gen-jco
+$(OUT_HTML): $(JS_ENTRY) gen-jco
 	npx bun build $(JS_ENTRY) --minify --production --target browser --outdir=$(OUT_DIR)
 
-bun-bundle:$(JS_TARGET)
+bun-bundle:$(OUT_HTML)
+
+mono-html: bun-bundle $(OUT_HTML)
+	npx vite build
 
 clean: 
-	rm $(JS_TARGET)
+	rm $(OUT_HTML)
 	rm -rf $(JCO_OUT_DIR)
 	rm -rf $(OUT_DIR)
 	cargo clean
 
-.PHONY: gen-jco bun-bundle clean
+.PHONY: gen-jco bun-bundle mono-html clean
 

@@ -18,5 +18,7 @@ world my-world {
 
 world my-world2 {
 	import dummy:logger/logger@0.1.0-alpha;
+    import config-mock:config-mock/config-mock@0.1.0-alpha;
+
     export to-upper: func(input: string) -> string;
 }

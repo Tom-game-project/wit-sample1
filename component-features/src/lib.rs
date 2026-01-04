@@ -47,9 +47,18 @@ mod bindings2 {
 
     use std::collections::HashMap;
     use dummy::logger::logger::log;
+    use config_mock::config_mock::config_mock::{
+        get_staff_groups, 
+        get_week_rules
+    };
 
     use chrono::{NaiveDate, Duration};
-    use shift_calendar;
+    use shift_calendar::{
+        self,
+        shift_gen::{
+            DayRule, Incomplete, ShiftHoll, StaffGroup, StaffGroupList, WeekRule, WeekRuleTable
+        }
+    };
 
     fn calculate_weeks_delta_from_base(year: i32, month: u32, day: u32) -> Option<i64> {
         //     January 1970
@@ -77,6 +86,19 @@ mod bindings2 {
 
     }
 
+    fn day_shift<'a>(day_shift: 
+        crate::bindings2::config_mock::config_mock::config_mock::DayShift) 
+    -> DayRule<'a, Incomplete> {
+        DayRule {
+            shift_morning: day_shift.morning.iter().map(|i|
+                ShiftHoll::new(i.group_id as usize, i.index as usize)
+            ).collect(),
+                shift_afternoon: day_shift.afternoon.iter().map(|i|
+                ShiftHoll::new(i.group_id as usize, i.index as usize)
+            ).collect(),
+        }
+    }
+
     impl Guest for Component {
         fn to_upper(input:String) -> String {
             let mut a:HashMap<String, String> = HashMap::new();
@@ -93,6 +115,37 @@ mod bindings2 {
             log(&format!("経過週数: {}", 
                 calculate_weeks_delta_from_base(1970, 1, 12).unwrap()
             ));
+
+            // スタッフリストを取得する
+            let staff_groups_form = get_staff_groups();
+            // ルールを取得する
+            let rules = get_week_rules();
+
+            // ロジックに渡せるようにデータを整える
+            let mut staff_group_list = StaffGroupList::new();
+            for i in &staff_groups_form {
+                let mut staff_group = StaffGroup::new(&i.name);
+
+                for name in &i.staff_list {
+                    staff_group.add_staff(&name.name);
+                }
+                staff_group_list.add_staff_group(staff_group);
+            }
+
+            // ロジックに渡せるようにデータを整える
+            let mut week_rule_table = WeekRuleTable::new();
+            for i in rules {
+                let week_rule = WeekRule([
+                    day_shift(i.mon),
+                    day_shift(i.tue),
+                    day_shift(i.wed),
+                    day_shift(i.thu),
+                    day_shift(i.fri),
+                    day_shift(i.sat),
+                    day_shift(i.sun),
+                ]);
+                week_rule_table.add_week_rule(week_rule);
+            }
 
             input.to_uppercase()
         }

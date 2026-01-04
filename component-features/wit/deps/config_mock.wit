@@ -1,0 +1,50 @@
+package config-mock:config-mock@0.1.0-alpha;
+
+interface config-mock {
+    // スタッフのデータ
+
+    record staff {
+        name: string, // スタッフの名前
+        id: u32       // 
+    }
+
+    record staff-group {
+        name: string,      // 職能種別のstring,例.キッチン、ホール
+        staff-list: list<staff>, // 属するスタッフのリスト
+    }
+
+    // シフト用ルール
+
+    // シフトホール
+    record shift-holl {
+        group-id: u32, // シフトホールに入りうる職能index
+        index: u32,       // 参照するstaff listのindex
+    }
+
+    // ある1日のシフト
+    record day-shift {
+        morning: list<shift-holl>,
+        afternoon: list<shift-holl>,
+    }
+
+    // ある1週間のシフト
+    record week-rule {
+        mon: day-shift,
+        tue: day-shift,
+        wed: day-shift,
+        thu: day-shift,
+        fri: day-shift,
+        sat: day-shift,
+        sun: day-shift,
+    }
+
+    type staff-groups = list<staff-group>; // List<職能>
+    type week-rules = list<week-rule>;     // List<WeekRule>
+
+    get-staff-groups: func() -> staff-groups;
+    get-week-rules: func() -> week-rules;
+}
+
+world imports {
+    import config-mock;
+}
