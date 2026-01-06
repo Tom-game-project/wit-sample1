@@ -1,14 +1,64 @@
 package component:component-features;
 
 interface example-resource {
+    enum shift-time {
+        morning,
+        afternoon
+    }
+
+    enum shift-weekday {
+        mon,
+        tue,
+        wed,
+        thu,
+        fri,
+        sat,
+        sun,
+    }
+
     resource example-list {
         constructor();
 
-        /// 文字列を追記し、チェーンのためにビルダー自身を返す。
-        append: func(s: string);
+        // 新しいスタッフグループを追加
+        add-new-group: func();
+        // スタッフグループを削除
+        remove-group: func(index: u32);
+        // スタッフグループの名前を更新
+        update-group-name: func(index: u32, name: string);
+        // 引数で指定されたグループに
+        // 具体的なスタッフを格納するスロットを追加
+        add-slot: func(group-idx: u32);
+        // 引数で指定されたグループのスロットを削除
+        remove-slot: func(group-idx: u32, slot-idx: u32);
+        // スタッフの名前の変更
+        update-slot-memo: func(group-idx: u32, slot-idx: u32, memo: string);
+        // 新しいweekly ruleを追加
+        add-rule: func();
+        // weekly ruleを削除
+        remove-rule: func(index: u32);
+        // weekly ruleの名称変更
+        update-rule-name: func(index: u32, name: string);
+        // weekly ruleに新しいシフトホールを追加する
+        add-rule-assignment: func(
+            rule-idx: u32,  //
+            day: shift-weekday,    // mon - sun
+            shift-time: shift-time,  // morning afternoon
+            staff-group-id: u32, // assignされうるstaff groupのindex
+            shift-staff-index: u32,// ホール
+        );
+        // weekly ruleから指定されたホールを削除する
+        remove-rule-assignment: func(
+            rule-idx: u32,  //
+            day: shift-weekday,    // mon - sun
+            shift-time: shift-time,  // morning afternoon
+            index: u32, 
+        );
 
-        /// 最終的に構築された文字列を返す。
-        to-string: func() -> string;
+        // 前の月
+        change-prev-month: func();
+        // 次の月
+        change-next-month: func();
+
     }
 }
 

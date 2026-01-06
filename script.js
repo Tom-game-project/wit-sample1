@@ -1,4 +1,6 @@
-/* --- UTILITIES --- */
+/* ==========================================================================
+   1. UTILITIES & CONSTANTS (ユーティリティと定数)
+   ========================================================================== */
 function el(tag, props = {}, ...children) {
     const element = document.createElement(tag);
     for (const [key, value] of Object.entries(props)) {
@@ -18,12 +20,15 @@ function getGroupColor(index) {
     const palette = ['#e67e22', '#27ae60', '#2980b9', '#8e44ad', '#c0392b', '#16a085', '#d35400', '#2c3e50'];
     return index < palette.length ? palette[index] : `hsl(${(index * 137.5) % 360}, 65%, 45%)`;
 }
+
 const getGroupPrefix = (idx) => String.fromCharCode(97 + idx); 
 const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
 
-/* --- STATE --- */
+
+/* ==========================================================================
+   2. STATE MANAGEMENT (状態管理)
+   ========================================================================== */
 const state = {
-    // Config Data
     staffGroups: [
         { name: "Kitchen", slots: ["Leader", "Sub", ""] },
         { name: "Hall", slots: ["Manager", "PartTime", ""] }
@@ -42,13 +47,20 @@ const state = {
             }
         }
     ],
-    // Calendar Data
     year: 2026,
     month: 0,
     scheduleData: {} 
 };
 
-/* --- VIEW SWITCHER --- */
+// Modal Context State
+let modalCtx = null;
+
+
+/* ==========================================================================
+   3. LOGIC & ACTION FUNCTIONS (ロジックと操作関数)
+   ========================================================================== */
+
+/* --- View Switching --- */
 function switchView(viewName) {
     document.querySelectorAll('.view-btn').forEach(btn => {
         if (btn.innerText.toLowerCase().includes(viewName)) btn.classList.add('active');
@@ -57,18 +69,16 @@ function switchView(viewName) {
     document.querySelectorAll('.view-section').forEach(sec => sec.classList.remove('active-view'));
     document.getElementById(`view-${viewName}`).classList.add('active-view');
     
-    // Refresh UI components when switching
     if (viewName === 'calendar') {
         updateRuleSelect();
         renderCalendar();
     }
 }
 
-/* --- LOGIC: GENERATOR (Config -> Calendar) --- */
-
-// 1. Populate Dropdown
+/* --- Generator Logic --- */
 function updateRuleSelect() {
     const select = document.getElementById('rule-select');
+    if (!select) return; // エラー回避
     select.innerHTML = '';
     state.rules.forEach((rule, idx) => {
         const option = document.createElement('option');
@@ -78,28 +88,27 @@ function updateRuleSelect() {
     });
 }
 
-// 2. Helper to resolve ID "a0" -> { name: "Leader", groupIdx: 0 }
 function resolveStaffId(idStr) {
     if (!idStr) return null;
     const gPrefix = idStr.charAt(0);
     const sIdx = parseInt(idStr.substring(1));
-    const gIdx = gPrefix.charCodeAt(0) - 97; // 'a' -> 0
+    const gIdx = gPrefix.charCodeAt(0) - 97;
 
     const group = state.staffGroups[gIdx];
     if (!group || group.slots[sIdx] === undefined) {
-        return { name: idStr + "?", groupIdx: 99 }; // Fallback
+        return { name: idStr + "?", groupIdx: 99 };
     }
     
-    // Use memo if exists, otherwise use GroupName-Index
     const memo = group.slots[sIdx];
     const dispName = memo ? memo : `${group.name}-${sIdx}`;
     
     return { name: dispName, groupIdx: gIdx };
 }
 
-// 3. Main Generation Function
 function generateSchedule() {
-    const ruleIdx = document.getElementById('rule-select').value;
+    const select = document.getElementById('rule-select');
+    const ruleIdx = select ? select.value : "";
+    
     if (ruleIdx === "") { alert("Please define a rule first."); return; }
     
     const rule = state.rules[ruleIdx];
@@ -108,20 +117,16 @@ function generateSchedule() {
 
     if (!confirm(`Apply rule "${rule.name}" to ${year}/${month + 1}? \nExisting data for this month will be overwritten.`)) return;
 
-    // Loop through all days in current month
     for (let d = 1; d <= daysInMonth; d++) {
         const date = new Date(year, month, d);
-        
-        // Get day of week (0=Sun, 1=Mon...). Adjust to match our days array (0=mon...6=sun)
         let dayIndex = date.getDay() - 1; 
-        if (dayIndex === -1) dayIndex = 6; // Sunday
+        if (dayIndex === -1) dayIndex = 6; 
         
-        const dayKey = days[dayIndex]; // "mon", "tue"...
-        const ruleDayData = rule.schedule[dayKey]; // { m: [], a: [] }
+        const dayKey = days[dayIndex];
+        const ruleDayData = rule.schedule[dayKey];
 
         const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
         
-        // Convert IDs to Staff Objects
         const m_staff = ruleDayData.m.map(resolveStaffId).filter(s => s);
         const a_staff = ruleDayData.a.map(resolveStaffId).filter(s => s);
 
@@ -131,10 +136,69 @@ function generateSchedule() {
     renderCalendar();
 }
 
-document.getElementById('generate-btn').onclick = generateSchedule;
+/* --- Config CRUD Actions --- */
+function addNewGroup() { state.staffGroups.push({ name: `Group${state.staffGroups.length + 1}`, slots: ["", ""] }); renderConfig(); }
+function removeGroup(i) { if(confirm("Shift IDs?")) { state.staffGroups.splice(i, 1); renderConfig(); } }
+function updateGroupName(i, v) { state.staffGroups[i].name = v; renderConfig(); }
+
+function addSlot(i) { state.staffGroups[i].slots.push(""); renderConfig(); }
+function removeSlot(g, s) { state.staffGroups[g].slots.splice(s, 1); renderConfig(); }
+function updateSlotMemo(g, s, v) { state.staffGroups[g].slots[s] = v; renderJSON(); }
+
+function addNewRule() { const s = {}; days.forEach(d=>s[d]={m:[],a:[]}); state.rules.push({name:`rule${state.rules.length}`, schedule:s}); renderConfig(); }
+function removeRule(i) { if(confirm("Del?")) { state.rules.splice(i, 1); renderConfig(); } }
+function updateRuleName(i, v) { state.rules[i].name = v; renderJSON(); updateRuleSelect(); }
+function removeAssignment(r, d, s, i) { state.rules[r].schedule[d][s].splice(i, 1); renderConfig(); }
+
+/* --- Modal Actions --- */
+function openModal(rIdx, day, shift) {
+    const modalEl = document.getElementById('modal');
+    const modalListEl = document.getElementById('modal-list');
+
+    modalCtx = { rIdx, day, shift };
+    modalListEl.replaceChildren();
+
+    state.staffGroups.forEach((group, gIdx) => {
+        const prefix = getGroupPrefix(gIdx);
+        const color = getGroupColor(gIdx);
+        const container = el('div', { style: { marginBottom: "20px" } }, 
+            el('div', { style: { color: color, fontWeight: "bold", marginBottom: "5px" } }, `${group.name} (${prefix})`)
+        );
+        const grid = el('div', { className: 'selection-grid' });
+        
+        group.slots.forEach((memo, sIdx) => {
+            const idStr = `${prefix}${sIdx}`;
+            // モーダルではメモがある場合は (メモ) を付記
+            const label = memo ? `${idStr}` : idStr;
+            grid.appendChild(el('div', { 
+                className: 'selection-btn', 
+                style: { borderLeftColor: color }, 
+                onclick: () => confirmAssignment(idStr) 
+            }, label));
+        });
+        
+        container.appendChild(grid);
+        modalListEl.appendChild(container);
+    });
+    
+    modalEl.style.display = 'flex';
+}
+
+function confirmAssignment(idStr) {
+    state.rules[modalCtx.rIdx].schedule[modalCtx.day][modalCtx.shift].push(idStr);
+    document.getElementById('modal').style.display = 'none';
+    renderConfig();
+}
+
+function closeModal() {
+    document.getElementById('modal').style.display = 'none';
+}
 
 
-/* --- LOGIC: CALENDAR RENDER --- */
+/* ==========================================================================
+   4. RENDER FUNCTIONS (描画関数)
+   ========================================================================== */
+
 function renderCalendar() {
     const mount = document.getElementById('calendar-mount');
     const label = document.getElementById('current-month-label');
@@ -191,19 +255,12 @@ function renderCalendar() {
     mount.replaceChildren(el('table', { className: 'calendar-table' }, thead, tbody));
 }
 
-document.getElementById('prev-btn').onclick = () => {
-    state.month--;
-    if (state.month < 0) { state.month = 11; state.year--; }
-    renderCalendar();
-};
-document.getElementById('next-btn').onclick = () => {
-    state.month++;
-    if (state.month > 11) { state.month = 0; state.year++; }
-    renderCalendar();
-};
-
-/* --- LOGIC: CONFIG RENDER --- */
-function renderConfig() { renderGroups(); renderRules(); renderJSON(); updateRuleSelect(); }
+function renderConfig() { 
+    renderGroups(); 
+    renderRules(); 
+    renderJSON(); 
+    updateRuleSelect(); 
+}
 
 function renderGroups() {
     const container = document.getElementById('staff-groups-container');
@@ -212,6 +269,7 @@ function renderGroups() {
         const prefix = getGroupPrefix(gIdx);
         const color = getGroupColor(gIdx);
         const slotListContainer = el('div', { className: 'slot-list' });
+        
         group.slots.forEach((memo, sIdx) => {
             slotListContainer.appendChild(el('div', { className: 'slot-item' },
                 el('span', { className: 'slot-idx' }, `${sIdx}:`),
@@ -219,6 +277,7 @@ function renderGroups() {
                 el('button', { className: 'btn btn-danger btn-sm', onclick: () => removeSlot(gIdx, sIdx) }, '×')
             ));
         });
+        
         container.appendChild(el('div', { className: 'group-card', style: { borderTopColor: color } },
             el('div', { className: 'group-header' },
                 el('span', { className: 'group-id-badge', style: { backgroundColor: color } }, `ID: ${prefix}`),
@@ -231,26 +290,27 @@ function renderGroups() {
     });
 }
 
-// 修正箇所：ここではID (idStr) をそのままラベルとして表示します
 function renderRules() {
     const container = document.getElementById('rules-container');
     container.replaceChildren();
+    
     state.rules.forEach((rule, rIdx) => {
         const theadTr = el('tr', {}, el('th', { className: 'config-row-header' }, 'Shift'));
         days.forEach(d => theadTr.appendChild(el('th', {}, d.toUpperCase())));
+        
         const tbody = el('tbody');
         ['m', 'a'].forEach(shiftType => {
             const tr = el('tr', {});
             tr.appendChild(el('td', { className: 'config-row-header' }, shiftType === 'm' ? 'Morning' : 'Afternoon'));
+            
             days.forEach(day => {
                 const cell = el('td', {});
                 rule.schedule[day][shiftType].forEach((idStr, arrIdx) => {
-                    // IDからグループのインデックスを特定して色を決める
                     const gPrefix = idStr.charAt(0);
                     const gIdx = gPrefix.charCodeAt(0) - 97;
                     const color = getGroupColor(gIdx);
                     
-                    // 表示は名前ではなく、IDそのもの (a0, b1 等) を使用
+                    // Config画面では ID (a0, b1) を表示
                     const label = idStr; 
                     
                     cell.appendChild(el('span', { 
@@ -265,6 +325,7 @@ function renderRules() {
             });
             tbody.appendChild(tr);
         });
+        
         container.appendChild(el('div', { className: 'rule-card' },
             el('div', { className: 'rule-header' },
                 el('input', { type: 'text', style: { fontSize: '1.1em', fontWeight: 'bold' }, value: rule.name, oninput: (e) => updateRuleName(rIdx, e.target.value) }),
@@ -275,55 +336,45 @@ function renderRules() {
     });
 }
 
-function renderJSON() { document.getElementById('json-output').textContent = JSON.stringify({staffGroups: state.staffGroups, rules: state.rules}, null, 2); }
-
-/* --- CONFIG ACTIONS --- */
-function addNewGroup() { state.staffGroups.push({ name: `Group${state.staffGroups.length + 1}`, slots: ["", ""] }); renderConfig(); }
-function removeGroup(i) { if(confirm("Shift IDs?")) { state.staffGroups.splice(i, 1); renderConfig(); } }
-function updateGroupName(i, v) { state.staffGroups[i].name = v; renderConfig(); }
-function addSlot(i) { state.staffGroups[i].slots.push(""); renderConfig(); }
-function removeSlot(g, s) { state.staffGroups[g].slots.splice(s, 1); renderConfig(); }
-function updateSlotMemo(g, s, v) { state.staffGroups[g].slots[s] = v; renderJSON(); }
-function addNewRule() { const s = {}; days.forEach(d=>s[d]={m:[],a:[]}); state.rules.push({name:`rule${state.rules.length}`, schedule:s}); renderConfig(); }
-function removeRule(i) { if(confirm("Del?")) { state.rules.splice(i, 1); renderConfig(); } }
-function updateRuleName(i, v) { state.rules[i].name = v; renderJSON(); updateRuleSelect(); }
-function removeAssignment(r, d, s, i) { state.rules[r].schedule[d][s].splice(i, 1); renderConfig(); }
-
-/* --- MODAL --- */
-let modalCtx = null;
-const modalEl = document.getElementById('modal');
-const modalListEl = document.getElementById('modal-list');
-function openModal(rIdx, day, shift) {
-    modalCtx = { rIdx, day, shift };
-    modalListEl.replaceChildren();
-    state.staffGroups.forEach((group, gIdx) => {
-        const prefix = getGroupPrefix(gIdx);
-        const color = getGroupColor(gIdx);
-        const container = el('div', { style: { marginBottom: "20px" } }, el('div', { style: { color: color, fontWeight: "bold", marginBottom: "5px" } }, `${group.name} (${prefix})`));
-        const grid = el('div', { className: 'selection-grid' });
-        group.slots.forEach((memo, sIdx) => {
-            const idStr = `${prefix}${sIdx}`;
-            // モーダルのボタンも ID (a0など) をメインに表示し、メモがあればカッコ書きで添える形式に変更
-            const label = memo ? `${idStr}` : idStr;
-            grid.appendChild(el('div', { 
-                className: 'selection-btn', 
-                style: { borderLeftColor: color }, 
-                onclick: () => confirmAssignment(idStr) 
-            }, label));
-        });
-        container.appendChild(grid);
-        modalListEl.appendChild(container);
-    });
-    modalEl.style.display = 'flex';
+function renderJSON() { 
+    document.getElementById('json-output').textContent = JSON.stringify({staffGroups: state.staffGroups, rules: state.rules}, null, 2); 
 }
-function confirmAssignment(idStr) { state.rules[modalCtx.rIdx].schedule[modalCtx.day][modalCtx.shift].push(idStr); modalEl.style.display = 'none'; renderConfig(); }
-document.getElementById('modal-cancel-btn').onclick = () => modalEl.style.display = 'none';
-modalEl.onclick = (e) => { if(e.target.id === 'modal') modalEl.style.display = 'none'; };
 
-/* --- INIT --- */
-document.getElementById('add-group-btn').onclick = addNewGroup;
-document.getElementById('add-rule-btn').onclick = addNewRule;
 
-// Initial Render
-renderConfig();
-renderCalendar();
+/* ==========================================================================
+   5. INITIALIZATION & EVENT LISTENERS (初期化とイベント設定)
+   ========================================================================== */
+
+function initApp() {
+    // Calendar Controls
+    document.getElementById('prev-btn').onclick = () => {
+        state.month--;
+        if (state.month < 0) { state.month = 11; state.year--; }
+        renderCalendar();
+    };
+    
+    document.getElementById('next-btn').onclick = () => {
+        state.month++;
+        if (state.month > 11) { state.month = 0; state.year++; }
+        renderCalendar();
+    };
+
+    document.getElementById('generate-btn').onclick = generateSchedule;
+
+    // Config Controls
+    document.getElementById('add-group-btn').onclick = addNewGroup;
+    document.getElementById('add-rule-btn').onclick = addNewRule;
+
+    // Modal Controls
+    document.getElementById('modal-cancel-btn').onclick = closeModal;
+    document.getElementById('modal').onclick = (e) => { 
+        if(e.target.id === 'modal') closeModal(); 
+    };
+
+    // Initial Render
+    renderConfig();
+    renderCalendar();
+}
+
+// Start the App
+initApp();

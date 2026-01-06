@@ -17,11 +17,11 @@ JCO_FLAGS = \
 			--no-nodejs-compat \
 			--tla-compat
 
-JS_ENTRY = \
+INDEX_HTML = \
 		   index.html
 
-JS_TARGET = \
-			build.js
+ENTRY_TS = \
+		   main.ts
 
 # host impls
 JS_SHIMS = \
@@ -52,8 +52,10 @@ $(JCO_OUT_DIR): $(WASM_SRC) $(JS_SHIMS)
 
 gen-jco:$(JCO_OUT_DIR)
 
-$(OUT_HTML): $(JS_ENTRY) gen-jco
-	npx bun build $(JS_ENTRY) --minify --production --target browser --outdir=$(OUT_DIR)
+$(OUT_HTML): $(INDEX_HTML) gen-jco $(ENTRY_TS)
+	# TODO
+	npx bun tsc --noEmit $(ENTRY_TS)
+	npx bun build $(INDEX_HTML) --minify --production --target browser --outdir=$(OUT_DIR)
 
 bun-bundle:$(OUT_HTML)
 

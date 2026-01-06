@@ -7,6 +7,8 @@ import {
 $init.then(() => {
     let example_resource = new exampleResource.ExampleList();
 
+    // TODO メソッドを大幅に変更
+    // TODO 修正の必要あり
     example_resource.append("hello,");
     example_resource.append("world,");
     example_resource.append("tom,");
