@@ -100,6 +100,12 @@ interface shift-manager {
             index: u32, 
         );
 
+        get-rule-assignment: func(
+            rule-idx: u32,  //
+            day: shift-weekday,    // mon - sun
+            shift-time: shift-time,  // morning afternoon
+        ) -> option<list<holl>>;
+
         // 前の月
         change-prev-month: func();
 
@@ -110,14 +116,18 @@ interface shift-manager {
 
         get-staff-groups: func() -> list<staff-group>;
 
+        // year
+        get-year: func() -> u32;
+        // month
+        get-month: func() -> u32;
     }
 }
 
-world my-world {
+world shift-manager-world {
     export shift-manager;
 }
 
-world my-world2 {
+world shift-gen-world {
 	import dummy:logger/logger@0.1.0-alpha;
     import config-mock:config-mock/config-mock@0.1.0-alpha;
 

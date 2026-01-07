@@ -30,7 +30,9 @@ JS_SHIMS = \
 
 # guest impls
 RS_SRCS = \
-		  component-features/src/lib.rs
+		  component-features/src/lib.rs \
+		  component-features/src/shift_manager.rs \
+		  component-features/src/shift_gen.rs
 
 OUT_DIR = \
 		   dist
@@ -54,8 +56,8 @@ gen-jco:$(JCO_OUT_DIR)
 
 $(OUT_HTML): $(INDEX_HTML) gen-jco $(ENTRY_TS)
 	# TODO
-	npx bun tsc --noEmit $(ENTRY_TS)
-	npx bun build $(INDEX_HTML) --minify --production --target browser --outdir=$(OUT_DIR)
+	bunx tsc --noEmit
+	bun build $(INDEX_HTML) --minify --production --target browser --outdir=$(OUT_DIR)
 
 bun-bundle:$(OUT_HTML)
 
@@ -63,7 +65,7 @@ mono-html: bun-bundle $(OUT_HTML)
 	npx vite build
 
 clean: 
-	rm $(OUT_HTML)
+	rm -f $(OUT_HTML)
 	rm -rf $(JCO_OUT_DIR)
 	rm -rf $(OUT_DIR)
 	cargo clean
