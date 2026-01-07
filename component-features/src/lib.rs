@@ -6,33 +6,43 @@ mod bindings {
 
     struct Component {}
 
-    use exports::component::component_features::example_resource::{ 
+    use exports::component::component_features::shift_manager::{ 
         ShiftWeekday, 
         ShiftTime,
-        GuestExampleList,
-        Guest
+        GuestShiftManager,
+        Guest,
+        // staff group data
+        StaffGroup,
+        StaffInfo,
+        // weekly rule data
+        WeeklyRule,
+        WeekSchedule,
+        DayShiftIds,
+        Holl,
     };
 
     use std::{
         cell::RefCell,
-        collections::BTreeMap, ops::Add,
+        collections::BTreeMap,
     };
+
+    use crate::bindings2::dummy::logger::logger::log;
 
     // --------------------------------------------------------
     // 1. Staff Groups Definition
     // --------------------------------------------------------
     //
     // スタッフ名を格納するスロット
-    struct StaffGroup {
-        name: String,         // 例: "Kitchen"
-        slots: Vec<StaffInfo>,   // 例: ["Leader", "Sub", ""]
-    }
-
-    struct StaffInfo(String);
+    // struct StaffGroup {
+    //     name: String,         // 例: "Kitchen"
+    //     slots: Vec<StaffInfo>,   // 例: ["Leader", "Sub", ""]
+    // }
+    // 
+    // struct StaffInfo(String);
 
     impl StaffGroup {
         fn add_slot(&mut self) {
-            self.slots.push(StaffInfo(String::from("")));
+            self.slots.push(StaffInfo{name: String::from("")});
         }
 
         fn remove_slot(&mut self, slot_idx: u32) {
@@ -41,7 +51,7 @@ mod bindings {
 
         fn update_memo(&mut self, staff_slot_index: u32, name:String) {
             if let Some(a) = self.slots.get_mut(staff_slot_index as usize) {
-                a.0 = name;
+                a.name = name;
             }
         }
     }
@@ -52,20 +62,20 @@ mod bindings {
     // "a0", "b1" などのIDは String として扱います
     //
     // 週ごとのシフトホール格納スロット
-    struct WeeklyRule {
-        name: String,         // 例: "Standard Week"
-        schedule: WeekSchedule
-    }
+    // struct WeeklyRule {
+    //     name: String,         // 例: "Standard Week"
+    //     schedule: WeekSchedule
+    // }
 
-    struct WeekSchedule {
-        mon: DayShiftIds,
-        tue: DayShiftIds,
-        wed: DayShiftIds,
-        thu: DayShiftIds,
-        fri: DayShiftIds,
-        sat: DayShiftIds,
-        sun: DayShiftIds,
-    }
+    // struct WeekSchedule {
+    //     mon: DayShiftIds,
+    //     tue: DayShiftIds,
+    //     wed: DayShiftIds,
+    //     thu: DayShiftIds,
+    //     fri: DayShiftIds,
+    //     sat: DayShiftIds,
+    //     sun: DayShiftIds,
+    // }
 
     impl WeekSchedule {
         fn new() -> Self {
@@ -148,10 +158,10 @@ mod bindings {
     }
 
     // 日ごとのシフトホール格納スロット
-    struct DayShiftIds {
-        m: Vec<Holl>,       // 午前シフトのIDリスト ["a0", "b1"]
-        a: Vec<Holl>,       // 午後シフトのIDリスト []
-    }
+    // struct DayShiftIds {
+    //     m: Vec<Holl>,       // 午前シフトのIDリスト ["a0", "b1"]
+    //     a: Vec<Holl>,       // 午後シフトのIDリスト []
+    // }
 
     impl DayShiftIds {
         fn new() -> Self {
@@ -160,10 +170,10 @@ mod bindings {
     }
 
     // シフトホール
-    struct Holl {
-        staff_group_id:u32, // スタッフグループを指す
-        shift_staff_index:u32, // シフトのルールを司るindex
-    }
+    // struct Holl {
+    //     staff_group_id:u32, // スタッフグループを指す
+    //     shift_staff_index:u32, // シフトのルールを司るindex
+    // }
 
     // --------------------------------------------------------
     // 3. Calendar Data Definition
@@ -208,7 +218,7 @@ mod bindings {
         schedule_data: RefCell<BTreeMap<String, CalendarEntry>>,
     }
 
-    impl GuestExampleList for AppState {
+    impl GuestShiftManager for AppState {
         fn new() -> Self {
             Self {
                 staff_groups: RefCell::new(vec![]),
@@ -220,12 +230,15 @@ mod bindings {
         }
 
         fn add_new_group(&self) {
+            let staff_group_length = self.staff_groups.borrow().len();
+            // log("add_new_group");
             self.staff_groups.borrow_mut().push(
                 StaffGroup { 
-                    name: format!("Group{}", self.staff_groups.borrow().len()),
+                    name: format!("Group{}", staff_group_length),
                     slots: vec![]
                 }
             );
+            // log(&format!("{:?}", self.staff_groups));
         }
 
         fn remove_group(&self, index: u32) {
@@ -247,6 +260,7 @@ mod bindings {
                 .borrow_mut()
                 .get_mut(group_idx as usize)
             {
+                // log("add alot");
                 a.add_slot();
             }
         }
@@ -363,10 +377,19 @@ mod bindings {
                 *month += 1;
             }
         }
+
+        fn get_rules(&self,) -> Vec<WeeklyRule> {
+            self.rules.borrow().clone()
+        }
+
+        fn get_staff_groups(&self,) -> Vec<StaffGroup> {
+            self.staff_groups.borrow().clone()
+        }
+
     }
 
-    impl Guest for Component{
-        type ExampleList = AppState;
+    impl Guest for Component {
+        type ShiftManager = AppState;
     }
 
     export!(Component);

@@ -1,6 +1,7 @@
 package component:component-features;
 
-interface example-resource {
+interface shift-manager {
+
     enum shift-time {
         morning,
         afternoon
@@ -16,28 +17,72 @@ interface example-resource {
         sun,
     }
 
-    resource example-list {
+    record staff-group {
+        name: string,
+        slots: list<staff-info>,
+    }
+
+    record staff-info {
+        name: string,
+    }
+
+    // 週ごとのルールデータ
+    record weekly-rule {
+        name: string,
+        schedule: week-schedule
+    }
+
+    record week-schedule {
+        mon: day-shift-ids,
+        tue: day-shift-ids,
+        wed: day-shift-ids,
+        thu: day-shift-ids,
+        fri: day-shift-ids,
+        sat: day-shift-ids,
+        sun: day-shift-ids,
+    }
+
+    record day-shift-ids {
+        m: list<holl>,
+        a: list<holl>,
+    }
+
+    record holl {
+        staff-group-id:u32, // スタッフグループを指す
+        shift-staff-index:u32, // シフトのルールを司るindex
+    }
+
+    resource shift-manager {
         constructor();
 
         // 新しいスタッフグループを追加
         add-new-group: func();
+
         // スタッフグループを削除
         remove-group: func(index: u32);
+
         // スタッフグループの名前を更新
         update-group-name: func(index: u32, name: string);
+
         // 引数で指定されたグループに
         // 具体的なスタッフを格納するスロットを追加
         add-slot: func(group-idx: u32);
+
         // 引数で指定されたグループのスロットを削除
         remove-slot: func(group-idx: u32, slot-idx: u32);
+
         // スタッフの名前の変更
         update-slot-memo: func(group-idx: u32, slot-idx: u32, memo: string);
+
         // 新しいweekly ruleを追加
         add-rule: func();
+
         // weekly ruleを削除
         remove-rule: func(index: u32);
+
         // weekly ruleの名称変更
         update-rule-name: func(index: u32, name: string);
+
         // weekly ruleに新しいシフトホールを追加する
         add-rule-assignment: func(
             rule-idx: u32,  //
@@ -46,6 +91,7 @@ interface example-resource {
             staff-group-id: u32, // assignされうるstaff groupのindex
             shift-staff-index: u32,// ホール
         );
+
         // weekly ruleから指定されたホールを削除する
         remove-rule-assignment: func(
             rule-idx: u32,  //
@@ -56,14 +102,19 @@ interface example-resource {
 
         // 前の月
         change-prev-month: func();
+
         // 次の月
         change-next-month: func();
+
+        get-rules: func() -> list<weekly-rule>;
+
+        get-staff-groups: func() -> list<staff-group>;
 
     }
 }
 
 world my-world {
-    export example-resource;
+    export shift-manager;
 }
 
 world my-world2 {

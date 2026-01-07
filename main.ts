@@ -1,33 +1,27 @@
 import {
     $init,
-    exampleResource,
-    toUpper,
+    shiftManager,
 } from "./target/jco/component_features.js";
 
 $init.then(() => {
-    let example_resource = new exampleResource.ExampleList();
+    let state = new shiftManager.ShiftManager();
 
-    // TODO メソッドを大幅に変更
-    // TODO 修正の必要あり
-    example_resource.append("hello,");
-    example_resource.append("world,");
-    example_resource.append("tom,");
+    state.addNewGroup();
+    // state.addNewGroup();
 
-    let build_string = example_resource.toString();
+    //console.log(state.getStaffGroups());
 
-    console.log(build_string);
-    const button = document.getElementById('submit-btn');
+    let submit_btn = document.getElementById("submit-btn");
+    let add_slot_btn = document.getElementById("add-slot");
 
-    if (button instanceof HTMLButtonElement) {
-        // このブロック内では button は HTMLButtonElement 型として扱われる
-        button.addEventListener('click', (event: MouseEvent) => {
-            // console.log('Clicked at', event.clientX, event.clientY);
-            let upper = toUpper("hello world");
-            console.log(upper);
-            alert('Action performed via pure TypeScript and WebAssembly!');
-        });
-    } else {
-        console.error('Button element not found or is not a button tag');
-    }
+    submit_btn?.addEventListener("click", () => {
+            console.log("submit_btn pushed");
+            console.log(state.getStaffGroups());
+    })
+
+    add_slot_btn?.addEventListener("click", () => {
+            console.log("add slot to 0")
+            state.addSlot(0);
+    })
 })
 
