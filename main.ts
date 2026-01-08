@@ -298,11 +298,13 @@ function renderGroups(state: shiftManager.ShiftManager) {
                 el('input', { 
                         type: 'text', 
                         className: 'slot-input', 
-                        value: memo, 
+                        value: memo.name, 
                         placeholder: 'Memo', 
                         oninput: (e: Event) => { 
                                 const target = e.target as HTMLInputElement;
-                                updateSlotMemo(state, gIdx, sIdx, target.value) 
+
+                                updateSlotMemo(state, gIdx, sIdx, target.value);
+                                // target.textContent = ;
                         }
                 }),
                 el('button', { 
@@ -331,7 +333,9 @@ function renderGroups(state: shiftManager.ShiftManager) {
             el('button', {
                     className: 'btn btn-outline',
                     style: { width: '100%', fontSize: '0.8em' },
-                    onclick: () => addSlot(state, gIdx) }, '+ Add Slot')
+                    onclick: () => { 
+                            addSlot(state, gIdx);
+                    } }, '+ Add Slot')
         ));
     });
 }
@@ -383,7 +387,9 @@ function renderRules(state: shiftManager.ShiftManager) {
                                 value: rule.name, 
                                 oninput: (e: Event) => {
                                         const target = e.target as HTMLInputElement;
-                                        updateRuleName(state, rIdx, target.value) }}),
+                                        updateRuleName(state, rIdx, target.value) 
+                                }
+                        }),
                 el('button', { className: 'btn btn-danger', onclick: () => removeRule(state, rIdx) }, 'Delete Rule')
             ),
             el('table', { className: 'config-table' }, el('thead', {}, theadTr), tbody)
@@ -451,22 +457,5 @@ $init.then(() => {
     let state = new shiftManager.ShiftManager();
 
     initApp(state);
-    // state.addNewGroup();
-    // state.addNewGroup();
-
-    //console.log(state.getStaffGroups());
-
-    // let submit_btn = document.getElementById("submit-btn");
-    // let add_slot_btn = document.getElementById("add-slot");
-
-    // submit_btn?.addEventListener("click", () => {
-    //         console.log("submit_btn pushed");
-    //         console.log(state.getStaffGroups());
-    // })
-    // 
-    // add_slot_btn?.addEventListener("click", () => {
-    //         console.log("add slot to 0")
-    //         state.addSlot(0);
-    // })
 })
 
