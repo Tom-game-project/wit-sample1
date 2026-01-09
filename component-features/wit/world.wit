@@ -17,6 +17,7 @@ interface shift-manager {
         sun,
     }
 
+    // スタッフグループ
     record staff-group {
         name: string,
         slots: list<staff-info>,
@@ -48,8 +49,23 @@ interface shift-manager {
     }
 
     record holl {
-        staff-group-id:u32, // スタッフグループを指す
+        staff-group-id:u32,    // スタッフグループを指す
         shift-staff-index:u32, // シフトのルールを司るindex
+    }
+
+    // 出力データ
+
+    record staff-pill {
+        name: string,
+        staff-group-id:u32,
+        staff-index: u32,
+    }
+
+    record daily-shift {
+        date: string, // "2026-01-08"
+        has-data: bool, // データが存在するか (skipなどでないか)
+        m: list<staff-pill>,  // 午前
+        a: list<staff-pill>,  // 午後
     }
 
     resource shift-manager {
@@ -118,8 +134,16 @@ interface shift-manager {
 
         // year
         get-year: func() -> u32;
+
         // month
         get-month: func() -> u32;
+
+        // シフト生成
+        // latest アンカーが指定された月に存在する場合のみ生成が可能
+        // create-month-shift() -> ;
+
+        // get-month-view: func() -> list<daily-shift>;
+
     }
 }
 

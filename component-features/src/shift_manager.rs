@@ -3,7 +3,7 @@ wit_bindgen::generate!({
     generate_all
 });
 
-struct Component {}
+struct Component;
 
 use exports::component::component_features::shift_manager::{ 
     ShiftWeekday, 
@@ -18,12 +18,28 @@ use exports::component::component_features::shift_manager::{
     WeekSchedule,
     DayShiftIds,
     Holl,
+    //
+    
+};
+
+use shift_calendar::{
+    self,
+    shift_gen::{
+        DayRule,
+        Incomplete, 
+        ShiftHoll, 
+        StaffGroupList,  
+        WeekRule, 
+        WeekRuleTable,
+        gen_one_week_shift
+    }
 };
 
 use std::{
     cell::RefCell,
-    collections::BTreeMap,
 };
+
+use crate::shift_calendar_manager::{ShiftCalendarManager};
 
 use crate::shift_gen::dummy::logger::logger::log;
 
@@ -232,6 +248,7 @@ struct ResolvedStaff {
 //
 // この構造体がアプリ全体の状態を管理する
 // このモジュールはwit/depsに依存する
+// この構造体はstatic life time
 struct AppState {
     staff_groups: RefCell<Vec<StaffGroup>>,
     rules: RefCell<Vec<WeeklyRule>>,
@@ -241,7 +258,7 @@ struct AppState {
 
     // Key: "YYYY-MM-DD"
     // 実際に生成されたカレンダー
-    schedule_data: RefCell<BTreeMap<String, CalendarEntry>>,
+    schedule_data: RefCell<ShiftCalendarManager>,
 }
 
 impl GuestShiftManager for AppState {
@@ -251,20 +268,25 @@ impl GuestShiftManager for AppState {
             rules: RefCell::new(vec![]),
             year: RefCell::new(2026), // TODO 初期値はdeps内の関数から取得する必要あり
             month: RefCell::new(1),   // TODO  初期値はdeps内の関数から取得する必要あり
-            schedule_data: RefCell::new(BTreeMap::new())
+            schedule_data: RefCell::new(
+                ShiftCalendarManager::new(
+                    // TODO
+                    // TODO
+                    2923, //base_abs_week,
+                    25 // initial_delta
+                )
+            )
         }
     }
 
     fn add_new_group(&self) {
         let staff_group_length = self.staff_groups.borrow().len();
-        // log("add_new_group");
         self.staff_groups.borrow_mut().push(
             StaffGroup { 
                 name: format!("Group{}", staff_group_length),
                 slots: vec![]
             }
         );
-        // log(&format!("{:?}", self.staff_groups));
     }
 
     fn remove_group(&self, index: u32) {
@@ -286,7 +308,6 @@ impl GuestShiftManager for AppState {
             .borrow_mut()
             .get_mut(group_idx as usize)
         {
-            // log("add alot");
             a.add_slot();
         }
     }
@@ -442,9 +463,59 @@ impl GuestShiftManager for AppState {
     fn get_month(&self,) -> u32 {
         *self.month.borrow()
     }
+
 }
 
-impl Guest for Component {
+fn day_shift<'a>(day_shift: 
+    &DayShiftIds
+) -> DayRule<'a, Incomplete> {
+    DayRule {
+        shift_morning: day_shift.m.iter().map(|i|
+            ShiftHoll::new(i.staff_group_id as usize, i.shift_staff_index as usize)
+        ).collect(),
+            shift_afternoon: day_shift.a.iter().map(|i|
+            ShiftHoll::new(i.staff_group_id as usize, i.shift_staff_index as usize)
+        ).collect(),
+    }
+}
+
+/*
+fn generate_shift(
+        weekly_rule: &[WeeklyRule],
+        staff_groups: &[StaffGroup],
+        week_delta: usize
+    ) ->  {
+    let mut staff_group_list = StaffGroupList::new();
+    for i in staff_groups {
+        let mut staff_group = shift_calendar::shift_gen::StaffGroup::new(&i.name);
+
+        for name in &i.slots {
+            staff_group.add_staff(&name.name);
+        }
+        staff_group_list.add_staff_group(staff_group);
+    }
+
+    let mut week_rule_table = WeekRuleTable::new();
+
+    for i in weekly_rule {
+        let week_rule = WeekRule([
+            day_shift(&i.schedule.mon),
+            day_shift(&i.schedule.tue),
+            day_shift(&i.schedule.wed),
+            day_shift(&i.schedule.thu),
+            day_shift(&i.schedule.fri),
+            day_shift(&i.schedule.sat),
+            day_shift(&i.schedule.sun),
+        ]);
+        week_rule_table.add_week_rule(week_rule);
+    }
+
+    let week_decided_shift = gen_one_week_shift(&week_rule_table, &staff_group_list, week_delta);
+}
+
+*/
+
+impl Guest for Component{
     type ShiftManager = AppState;
 }
 

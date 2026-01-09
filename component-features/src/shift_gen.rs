@@ -41,6 +41,14 @@ fn calculate_weeks_delta_from_base(year: i32, month: u32, day: u32) -> Option<i6
     // 26 27 28 29 30 31
     //
     // 1969/12/29 as week base
+
+    // (unix_base_week: number,week_delta:  number)  Mo Tu We Th Fr Sa Su
+    // (unix_base_week: 0,week_delta:            0)           1  2  3  4
+    // (unix_base_week: 1,week_delta:            1)  5  6  7  8  9 10 11
+    // (unix_base_week: 2,week_delta:         skip) 12 13 14 15 16 17 18
+    // (unix_base_week: 3,week_delta:            2) 19 20 21 22 23 24 25
+    // (unix_base_week: 4,week_delta:            3) 26 27 28 29 30 31
+
     let date1 = NaiveDate::from_ymd_opt(1969, 12, 29)
         .unwrap() /* safe unwrap */;
 

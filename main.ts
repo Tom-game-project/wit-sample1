@@ -1,3 +1,9 @@
+// main.ts
+//
+// ロジックのエントリーポイント
+//
+//
+
 import {
     $init,
     shiftManager,
@@ -11,13 +17,18 @@ import type {
 /* ==========================================================================
    1. UTILITIES & CONSTANTS (ユーティリティと定数)
    ========================================================================== */
+
 function el(tag: any, props = {}, ...children: any[]) {
     const element = document.createElement(tag);
     for (const [key, value] of Object.entries(props)) {
-        if (key === 'className') element.className = value;
-        else if (key === 'style' && typeof value === 'object') Object.assign(element.style, value);
-        else if (key.startsWith('on') && typeof value === 'function') element.addEventListener(key.substring(2).toLowerCase(), value);
-        else element.setAttribute(key, value);
+        if (key === 'className')
+                element.className = value;
+        else if (key === 'style' && typeof value === 'object') 
+                Object.assign(element.style, value);
+        else if (key.startsWith('on') && typeof value === 'function') 
+                element.addEventListener(key.substring(2).toLowerCase(), value);
+        else 
+                element.setAttribute(key, value);
     }
     children.forEach(child => {
         if (typeof child === 'string' || typeof child === 'number') element.textContent = child;
@@ -215,6 +226,8 @@ function closeModal() {
    4. RENDER FUNCTIONS (描画関数)
    ========================================================================== */
 
+// TODO
+// TODO
 /*
 function renderCalendar(state: shiftManager.ShiftManager) {
     const mount = document.getElementById('calendar-mount')!;
@@ -238,7 +251,10 @@ function renderCalendar(state: shiftManager.ShiftManager) {
     let tr = el('tr');
     let count = 0;
 
-    for (let i = 0; i < startOffset; i++) { tr.appendChild(el('td', { className: 'diff-month' })); count++; }
+    for (let i = 0; i < startOffset; i++) { 
+            tr.appendChild(el('td', { className: 'diff-month' })); 
+            count++; 
+    }
 
     const today = new Date();
     for (let d = 1; d <= totalDays; d++) {
