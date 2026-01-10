@@ -17,7 +17,7 @@
 </nav>
 
 <div class="main-viewport">
-    
+    <!--
     <div id="view-calendar" class="view-section active-view">
         <div class="container">
             <div class="calendar-controls-bar">
@@ -37,6 +37,26 @@
             </div>
 
             <div id="calendar-mount"></div>
+        </div>
+    </div>
+    -->
+
+    <div id="view-calendar" class="view-section active-view">
+        <div class="container">
+            <div class="calendar-controls-bar">
+                <button class="nav-btn" id="prev-btn">&lt; Prev</button>
+                <span class="month-label" id="current-month-label">Loading...</span>
+                <button class="nav-btn" id="next-btn">Next &gt;</button>
+                <button class="nav-btn" onclick="window.print()">🖨️ Print</button>
+
+                <div class="generator-controls">
+                    <span style="font-size:0.85em; font-weight:bold; color:#555;">Apply Rule:</span>
+                    <select id="rule-select" class="generator-select">
+                        </select>
+                    <button id="generate-btn" class="btn btn-primary btn-sm">Generate</button>
+                </div>
+            </div>
+            <div id="calendar-mount" class="calendar-list"></div>
         </div>
     </div>
 

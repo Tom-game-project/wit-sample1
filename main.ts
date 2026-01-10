@@ -293,6 +293,204 @@ function renderCalendar(state: shiftManager.ShiftManager) {
 }
 */
 
+
+// --- Imports (Wasm generated files) ---
+// import { generateMonthlyView } from "./shift_engine.js"; 
+// ※ 実際はjco等で生成されたファイルをimportします
+
+// --- State Management ---
+
+
+// --- Calendar Logic ---
+        interface AppState {
+    year: number;
+    month: number; // 1-12
+    weekSkipState: Record<string, boolean>; // key: "YYYY-Wxx", value: isActive
+    baseDelta: number;
+}
+
+let state: AppState = { year: 2026, month: 2, weekSkipState: {}, baseDelta: 10 };
+
+
+/**
+ * カレンダーを再描画するメイン関数
+ * ユーザーの操作（チェックボックス）があるたびに呼ばれます
+ */
+function renderCalendar(status: shiftManager.ShiftManager) {
+    const mount = document.getElementById('calendar-mount');
+
+    const label = document.getElementById('current-month-label')!;
+    label.textContent = new Date(status.getYear(), status.getMonth() , 1).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+    
+    if (!mount) return;
+    mount.innerHTML = '';
+
+    // 1. カレンダー用日付データの生成 (月曜始まり)
+    const weeksData = calculateCalendarDates(status.getYear(), status.getMonth());
+
+    // 2. Wasm用入力の作成 & APIコール (Mock)
+    // ここでRustのロジックを呼び出し、LogicalDeltaの整合性を計算させます
+    const shiftResults = mockWasmCall(weeksData, state);
+
+    console.log(weeksData, shiftResults);
+
+    // 3. DOM生成
+    const fragment = document.createDocumentFragment();
+
+    weeksData.forEach((week, index) => {
+        const weekResult = shiftResults[index];
+        const isActive = weekResult.assignedPattern !== "Skipped";
+
+        // 行コンテナ
+        const row = document.createElement('div');
+        row.className = `cal-week-row ${isActive ? 'active' : 'skipped'}`;
+
+        // [左列] コントロール (チェックボックス + シフト表示)
+        const controlCell = document.createElement('div');
+        controlCell.className = 'cal-cell-control';
+
+        // Checkbox
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.checked = isActive;
+        checkbox.addEventListener('change', (e) => {
+            const checked = (e.target as HTMLInputElement).checked;
+            state.weekSkipState[week.weekId] = checked; // api に実装
+            renderCalendar(status); // 再描画
+        });
+
+        // Shift Label
+        const label = document.createElement('div');
+        label.className = `shift-badge ${isActive ? 'active' : 'skipped'}`;
+        label.textContent = weekResult.assignedPattern;
+
+        controlCell.appendChild(checkbox);
+        controlCell.appendChild(label);
+
+        // Logical Delta (Debug)
+        if (weekResult.logicalDelta !== null) {
+            const delta = document.createElement('small');
+            delta.style.color = '#ccc';
+            delta.textContent = `#${weekResult.logicalDelta}`;
+            controlCell.appendChild(delta);
+        }
+
+        row.appendChild(controlCell);
+
+        // [右7列] 日付セル (Mon - Sun)
+        week.days.forEach(day => {
+            const dayCell = document.createElement('div');
+            dayCell.className = 'cal-cell-day';
+
+            // 日付数値
+            const numSpan = document.createElement('span');
+            numSpan.className = 'date-num';
+            numSpan.textContent = day.getDate().toString();
+
+            // 他月の日付は薄くする
+            if (day.getMonth() !== status.getMonth()) {
+                dayCell.style.opacity = '0.4';
+            }
+
+            dayCell.appendChild(numSpan);
+            // ここに実際のシフト詳細などを追加可能
+
+            row.appendChild(dayCell);
+        });
+
+        fragment.appendChild(row);
+    });
+
+    mount.appendChild(fragment);
+}
+
+// // --- Logic: 月曜始まりのカレンダー計算 ---
+function calculateCalendarDates(year: number, month: number) {
+    // month: 0 = January, 11 = December
+    const weeks = [];
+
+    // 月の初日 (JavaScriptのDateも月は0始まりなのでそのまま渡す)
+    const firstDay = new Date(year, month, 1);
+
+    // カレンダーの開始日を決定（その月の1日を含む週の月曜日まで戻る）
+    // firstDay.getDay(): 0(Sun) ... 6(Sat)
+    // 月曜始まり(Mon=0)にするための計算: (day + 6) % 7
+    const dayOfWeek = (firstDay.getDay() + 6) % 7;
+
+    const startDate = new Date(firstDay);
+    // 日付を戻す (setDateは自動的に前月へ繰り越してくれる)
+    startDate.setDate(firstDay.getDate() - dayOfWeek);
+
+    const currentProcessDate = new Date(startDate);
+
+    // 週番号のカウンタ
+    let weekCounter = 1;
+
+    // 無限ループで回し、その週が「完全に翌月以降」になったら抜ける
+    while (true) {
+        const weekDays: Date[] = [];
+        let hasCurrentMonthDay = false;
+
+        // 1週間(7日)分の日付を取得
+        for (let i = 0; i < 7; i++) {
+            // 日付オブジェクトを複製してリストに追加
+            const d = new Date(currentProcessDate);
+            weekDays.push(d);
+
+            // その日が「指定された月」に含まれるかチェック
+            // month引数(0-11) と d.getMonth()(0-11) を直接比較
+            if (d.getMonth() === month) {
+                hasCurrentMonthDay = true;
+            }
+
+            // 次の日へ進める
+            currentProcessDate.setDate(currentProcessDate.getDate() + 1);
+        }
+
+        // その週の中に、今月(指定されたmonth)の日が1日もなければ終了
+        // (＝カレンダーの末尾を超えた)
+        if (!hasCurrentMonthDay && weeks.length > 0) {
+            break;
+        }
+
+        weeks.push({
+            weekId: `${year}-W${weekCounter}`, // 簡易ID
+            days: weekDays
+        });
+        weekCounter++;
+    }
+
+    return weeks;
+}
+
+
+// --- Mock Wasm Logic ---
+function mockWasmCall(weeks: any[], currentState: AppState) {
+    let delta = currentState.baseDelta;
+    
+    return weeks.map(week => {
+        // Stateに保存されていなければデフォルトtrue(Active)
+        const isActive = currentState.weekSkipState[week.weekId] !== false;
+
+        if (isActive) {
+            delta++;
+            return {
+                weekId: week.weekId,
+                assignedPattern: (delta % 2 === 0) ? "Day A" : "Night B",
+                logicalDelta: delta
+            };
+        } else {
+            return {
+                weekId: week.weekId,
+                assignedPattern: "Skipped",
+                logicalDelta: null
+            };
+        }
+    });
+}
+
+// calendar ==========================
+
 function renderConfig(state: shiftManager.ShiftManager) { 
     renderGroups(state); 
     renderRules(state); 
@@ -432,9 +630,6 @@ function initApp(state: shiftManager.ShiftManager) {
     }
     // Calendar Controls
 
-// TODO
-// TODO
-/*
     document.getElementById('prev-btn')!.onclick = () => {
             state.changePrevMonth();
             renderCalendar(state);
@@ -442,11 +637,14 @@ function initApp(state: shiftManager.ShiftManager) {
     
     document.getElementById('next-btn')!.onclick = () => {
             state.changeNextMonth()
-            renderCalendar();
+            renderCalendar(state);
     };
 
+    // TODO
+    // TODO
+    /*
     document.getElementById('generate-btn')!.onclick = generateSchedule;
-*/
+    */
 
     // Config Controls
     document.getElementById('add-group-btn')!.onclick = () => addNewGroup(state);
@@ -462,11 +660,7 @@ function initApp(state: shiftManager.ShiftManager) {
 
     // Initial Render
     renderConfig(state);
-// TODO
-// TODO
-/*
     renderCalendar(state);
-*/
 }
 
 $init.then(() => {

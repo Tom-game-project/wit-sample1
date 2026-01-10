@@ -6,8 +6,6 @@
 
 ## 概要
 
-
-
 ## ビルド
 
 ```sh
@@ -17,12 +15,22 @@ make BUILD=release bun-bundle
 ## ディレクトリ構成
 
 - component-features
-  // フロントエンドの画面の状態を管理するプログラム
+
+  フロントエンドの画面の状態を管理するプログラム
+
+  - src
+
+    Rustのプログラム
+
   - wit
+
     Wasm Interface Typeの定義
     - deps
+
       jsがcomponent-features(rust)に提供する機能
+
     - world.wit
+
       component-features(rust)がmain.tsに提供する機能
 
 - index.html
@@ -30,7 +38,10 @@ make BUILD=release bun-bundle
 - style.css
 
 - main.ts 
+
   Rust(Wasm)を呼び出しUIを表示するプログラム
 
 - work_shift_dayoff_logic
-  半休取得のアルゴリズム
+
+## TODO
+

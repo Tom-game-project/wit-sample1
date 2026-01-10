@@ -130,3 +130,87 @@ html, body, .main-viewport, .view-section, .container { height: auto !important;
 body { zoom: 0.85; }
 }
 
+
+
+/* カレンダー全体枠 */
+.calendar-grid-container {
+    border: 1px solid #ddd;
+    background: #fff;
+    margin-top: 10px;
+}
+
+/* ヘッダー行 (Grid Layout) */
+.cal-header-row {
+    display: grid;
+    /* 左端(120px) + 7日間(等分) */
+    grid-template-columns: 120px repeat(7, 1fr);
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #ddd;
+    font-weight: bold;
+    color: #555;
+}
+
+.cal-cell-header {
+    padding: 10px;
+    text-align: center;
+    border-right: 1px solid #eee;
+}
+
+/* データ行 (Grid Layout) */
+.cal-week-row {
+    display: grid;
+    grid-template-columns: 120px repeat(7, 1fr);
+    border-bottom: 1px solid #eee;
+}
+
+/* 左端：制御列 */
+.cal-cell-control {
+    padding: 10px;
+    display: flex;
+    flex-direction: column; /* 縦並び: チェックボックス, ラベル */
+    align-items: center;
+    justify-content: center;
+    border-right: 2px solid #ddd; /* 区切り線を強調 */
+    background-color: #fafafa;
+}
+
+/* 右側：日付セル */
+.cal-cell-day {
+    min-height: 80px; /* ある程度の高さを確保 */
+    padding: 5px;
+    border-right: 1px solid #f0f0f0;
+    position: relative;
+}
+
+.cal-cell-day .date-num {
+    font-weight: bold;
+    margin-bottom: 4px;
+    display: block;
+}
+
+/* 状態ごとのスタイル */
+.cal-week-row.skipped {
+    background-color: #f4f4f4; /* 全体をグレーアウト */
+    color: #aaa;
+}
+.cal-week-row.skipped .cal-cell-day {
+    background-color: repeating-linear-gradient(
+        45deg,
+        #f4f4f4,
+        #f4f4f4 10px,
+        #eeeeee 10px,
+        #eeeeee 20px
+    ); /* 斜線エフェクトなど */
+}
+
+/* シフトバッジ */
+.shift-badge {
+    font-size: 0.8rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 5px;
+    color: white;
+    text-align: center;
+}
+.shift-badge.active { background-color: #007bff; }
+.shift-badge.skipped { background-color: #999; }
