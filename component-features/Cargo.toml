@@ -15,4 +15,7 @@ chrono = "0.4.42"
 shift_calendar = { path = "../work_shift_dayoff_logic" }
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = [
+    "cdylib", 
+    "rlib"  # test用
+]

@@ -87,7 +87,7 @@ $(OUT_HTML): $(INDEX_HTML) gen-jco $(ENTRY_TS)
 	bun build $(INDEX_HTML) --minify --production --target browser --outdir=$(OUT_DIR)
 	bunx vite build
 
-bun-bundle:$(OUT_HTML)
+bun-bundle: $(OUT_HTML)
 
 clean: 
 	rm -f $(OUT_HTML)

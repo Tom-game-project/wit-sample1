@@ -1,5 +1,7 @@
-mod shift_manager; 
+#[cfg(target_arch = "wasm32")]
+pub mod shift_manager; 
 
-mod shift_gen;
+#[cfg(target_arch = "wasm32")]
+pub mod shift_gen;
 
-mod shift_calendar_manager;
+pub mod shift_calendar_manager;
