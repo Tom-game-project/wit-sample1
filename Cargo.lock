@@ -69,7 +69,9 @@ name = "component-features"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "serde",
  "shift_calendar",
+ "toml",
  "wit-bindgen",
  "wit-bindgen-rt",
 ]

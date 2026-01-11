@@ -137,13 +137,6 @@ interface shift-manager {
 
         // month
         get-month: func() -> u32;
-
-        // シフト生成
-        // latest アンカーが指定された月に存在する場合のみ生成が可能
-        // create-month-shift() -> ;
-
-        // get-month-view: func() -> list<daily-shift>;
-
     }
 }
 
@@ -156,4 +149,5 @@ world shift-gen-world {
     import config-mock:config-mock/config-mock@0.1.0-alpha;
 
     export to-upper: func(input: string) -> string;
+    export calculate-weeks-delta-from-base: func(year: s32, month: u32, day: u32) -> option<s64>;
 }

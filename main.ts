@@ -293,7 +293,6 @@ function renderCalendar(state: shiftManager.ShiftManager) {
 }
 */
 
-
 // --- Imports (Wasm generated files) ---
 // import { generateMonthlyView } from "./shift_engine.js"; 
 // ※ 実際はjco等で生成されたファイルをimportします
@@ -302,7 +301,7 @@ function renderCalendar(state: shiftManager.ShiftManager) {
 
 
 // --- Calendar Logic ---
-        interface AppState {
+interface AppState {
     year: number;
     month: number; // 1-12
     weekSkipState: Record<string, boolean>; // key: "YYYY-Wxx", value: isActive
@@ -310,7 +309,6 @@ function renderCalendar(state: shiftManager.ShiftManager) {
 }
 
 let state: AppState = { year: 2026, month: 2, weekSkipState: {}, baseDelta: 10 };
-
 
 /**
  * カレンダーを再描画するメイン関数
@@ -355,7 +353,7 @@ function renderCalendar(status: shiftManager.ShiftManager) {
         checkbox.checked = isActive;
         checkbox.addEventListener('change', (e) => {
             const checked = (e.target as HTMLInputElement).checked;
-            state.weekSkipState[week.weekId] = checked; // api に実装
+            state.weekSkipState[week.weekId] = checked; //                   TODO: api に実装
             renderCalendar(status); // 再描画
         });
 
