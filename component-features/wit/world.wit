@@ -100,7 +100,7 @@ interface shift-manager {
         update-slot-memo: func(group-idx: u32, slot-idx: u32, memo: string);
 
         // 新しいweekly ruleを追加
-        add-rule: func();
+        add-week: func();
 
         // weekly ruleを削除
         remove-rule: func(index: u32);
@@ -150,13 +150,19 @@ interface shift-manager {
         get-month: func() -> u32;
 
         // 現在のポインターが指すシフトを表示する
-        // year
+        // year  内部のものを使う
         // month
         get-monthly-shift: func() -> list<option<weekly-shift-out>>;
 
+        // skip_flagsに従いシフトを生成する.
         apply-month-shift: func(skip-flags: list<bool>); // エラーを返す設計になる可能性もある
 
+        // 現在のポインターが指す設定を表示する
+        // year
+        // month
+        get-skip-flags: func() -> list<bool>;
     }
+
 }
 
 world shift-manager-world {

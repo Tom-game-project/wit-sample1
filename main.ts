@@ -98,24 +98,6 @@ function updateRuleSelect(state: shiftManager.ShiftManager) {
     });
 }
 
-function resolveStaffId(state: shiftManager.ShiftManager, idStr: String) {
-    if (!idStr) return null;
-    const gPrefix = idStr.charAt(0);
-    const sIdx = parseInt(idStr.substring(1));
-    const gIdx = gPrefix.charCodeAt(0) - 97;
-
-    const group = state.getStaffGroups()[gIdx];
-    if (!group || group.slots[sIdx] === undefined) {
-        return { name: idStr + "?", groupIdx: 99 };
-    }
-    
-    const memo = group.slots[sIdx];
-    const dispName = memo ? memo : `${group.name}-${sIdx}`;
-    
-    return { name: dispName, groupIdx: gIdx };
-}
-
-
 /* --- Config CRUD Actions --- */
 function addNewGroup(state: shiftManager.ShiftManager) {
     state.addNewGroup();
@@ -150,7 +132,7 @@ function updateSlotMemo(state: shiftManager.ShiftManager, g:number, s:number, v:
 }
 
 function addNewRule(state: shiftManager.ShiftManager) {
-    state.addRule();
+    state.addWeek();
     renderConfig(state); 
 }
 
@@ -232,99 +214,145 @@ function closeModal() {
 
 // --- Global State for UI Control ---
 // Wasmに反映する前のチェックボックスの状態を一時保持するリスト
-let pendingSkipFlags: boolean[] = [];
 
 /**
  * カレンダー描画関数
  * Wasmから現在のシフト状態を取得し、pendingSkipFlags と合わせて描画します
  */
-function renderCalendar(manager: shiftManager.ShiftManager) {
-    const mount = document.getElementById('calendar-mount');
-    const label = document.getElementById('current-month-label');
+// --- Global State ---
+// API仕様に合わせる: True = Skip (休み), False = Active (稼働)
+let pendingSkipFlags: boolean[] = []; 
 
-    // ラベル更新
+function renderCalendar(manager: shiftManager.ShiftManager) {
+    // --- 1. 月ラベルの更新 (最優先で実行) ---
+    const label = document.getElementById('current-month-label');
     if (label) {
-        label.textContent = new Date(manager.getYear(), manager.getMonth(), 1)
-            .toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
+        // manager.getMonth() は 0-11 を返すと仮定
+        const date = new Date(manager.getYear(), manager.getMonth(), 1);
+        label.textContent = date.toLocaleDateString('ja-JP', { 
+            year: 'numeric', 
+            month: 'long' 
+        });
     }
-    
+
+    const mount = document.getElementById('calendar-mount');
     if (!mount) return;
     mount.innerHTML = '';
 
-    // 1. カレンダーの日付計算 (月曜始まり)
+    // --- 2. データ準備 ---
     const weeksData = calculateCalendarDates(manager.getYear(), manager.getMonth());
-
-    // 2. フラグ配列の初期化 (月が変わった場合などの整合性確保)
-    if (pendingSkipFlags.length !== weeksData.length) {
-        // デフォルトは全て Active (true) にする、あるいはWasmの前回状態から復元も可
-        pendingSkipFlags = new Array(weeksData.length).fill(true);
-    }
-
-    // 3. Wasmからシフトデータを取得 (Generate済みの場合データが入る)
-    // 型: (WeeklyShiftOut | undefined)[] 
+    
+    // Wasmから「現在の設定(Skipフラグ)」と「確定シフト」を取得
+    const savedSkipFlags = manager.getSkipFlags(); 
     const shiftList = manager.getMonthlyShift(); 
 
-    // 4. DOM生成
+    // --- 3. フラグ配列の同期 ---
+    // 月が変わった、または初期ロード時
+    if (pendingSkipFlags.length !== weeksData.length) {
+        if (savedSkipFlags.length === weeksData.length) {
+            // 保存された設定があればコピー (True=Skip)
+            pendingSkipFlags = [...savedSkipFlags];
+        } else {
+            // デフォルトは「稼働」なので、Skip = false で埋める
+            pendingSkipFlags = new Array(weeksData.length).fill(false);
+        }
+    }
+
     const fragment = document.createDocumentFragment();
 
     weeksData.forEach((week, index) => {
-        // UI上のチェック状態
-        const isUiActive = pendingSkipFlags[index];
-        
-        // Wasm上のデータ (Generateされていれば存在する)
-        // Wasm側で option<weekly-shift-out> なので、TS側では undefined チェックが必要
-        const weekShiftData = shiftList[index]; 
+        // API/変数: True = Skip
+        const isSkipped = pendingSkipFlags[index];
+        // UI: True(Checked) = Active
+        const isUiActive = !isSkipped;
 
-        // 行コンテナ
-        // UIでスキップ選択中、またはWasmデータが無い(None)場合は skipped スタイル
+        const weekShiftData = shiftList[index];
+        // データが存在する(Some)なら決定済み
+        const isDecided = weekShiftData !== undefined;
+
+        // --- 行のスタイル決定 ---
         const row = document.createElement('div');
-        const visualActive = (weekShiftData !== undefined);
-        row.className = `cal-week-row ${visualActive ? 'active' : 'skipped'}`;
+        let statusClass = "status-active"; // 青 (予定)
 
-        // --- [左列] コントロール ---
+        if (isDecided) {
+            // 緑 (確定済み)
+            statusClass = "status-decided";
+        } else if (isSkipped) {
+            // 灰 (スキップ中)
+            statusClass = "status-skipped";
+        }
+        
+        row.className = `cal-week-row ${statusClass}`;
+
+        // --- [左列] コントロール (スイッチ) ---
         const controlCell = document.createElement('div');
         controlCell.className = 'cal-cell-control';
 
-        // Checkbox
+        // スイッチ要素
+        const switchLabel = document.createElement('label');
+        switchLabel.className = 'switch';
+        
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
+        // UI上は「稼働」ならチェックを入れる
         checkbox.checked = isUiActive;
+
         checkbox.addEventListener('change', (e) => {
-            const checked = (e.target as HTMLInputElement).checked;
-            // TS側の一時フラグを更新
-            pendingSkipFlags[index] = checked;
-            // 即座に再描画 (グレーアウト処理のため。WasmへのApplyはまだしない)
+            const isChecked = (e.target as HTMLInputElement).checked;
+            // UI: ON(Active) -> Skip: False
+            // UI: OFF(Inactive) -> Skip: True
+            pendingSkipFlags[index] = !isChecked;
+            
             renderCalendar(manager); 
         });
 
-        // Shift Label (データがあれば表示)
-        const labelDiv = document.createElement('div');
-        labelDiv.className = `shift-badge ${visualActive ? 'active' : 'skipped'}`;
-        // 簡易表示: データがあるかどうかで判定
-        labelDiv.textContent = visualActive ? "Active" : "Skip";
+        const slider = document.createElement('span');
+        slider.className = 'slider';
 
-        controlCell.appendChild(checkbox);
-        controlCell.appendChild(labelDiv);
+        switchLabel.appendChild(checkbox);
+        switchLabel.appendChild(slider);
+        controlCell.appendChild(switchLabel);
+
+        // ステータス文字
+        const statusText = document.createElement('span');
+        statusText.style.fontSize = "10px";
+        statusText.style.marginTop = "4px";
+        statusText.style.fontWeight = "bold";
+        
+        if (isDecided) {
+            statusText.textContent = "FIXED";
+            statusText.style.color = "#2e7d32"; // Dark Green
+        } else if (isSkipped) {
+            statusText.textContent = "SKIP";
+            statusText.style.color = "#9e9e9e"; // Grey
+        } else {
+            statusText.textContent = "READY";
+            statusText.style.color = "#1565c0"; // Blue
+        }
+        
+        controlCell.appendChild(statusText);
         row.appendChild(controlCell);
 
         // --- [右7列] 日付セル ---
         week.days.forEach((day, dayIndex) => {
             const dayCell = document.createElement('div');
             dayCell.className = 'cal-cell-day';
-
-            // 日付数値
+            
             const numSpan = document.createElement('span');
             numSpan.className = 'date-num';
             numSpan.textContent = day.getDate().toString();
+            
+            // 他月の日付は薄く
             if (day.getMonth() !== manager.getMonth()) {
-                dayCell.style.opacity = '0.4';
+                dayCell.style.opacity = '0.3';
             }
+            
             dayCell.appendChild(numSpan);
 
-            // シフト割り当ての描画
-            // visualActive かつ シフトデータが存在する場合のみ描画
-            if (visualActive && weekShiftData) {
-                // weekly-shift-out の mon, tue... を index (0-6) で引けるようにする
+            // シフトデータがあれば描画
+            // (スキップされていても、古いデータが残っている場合などは表示しないように isDecided チェックを入れるか、
+            //  あるいは isSkipped でもデータがあれば表示するかは仕様次第。ここではDecidedなら表示)
+            if (isDecided && weekShiftData) {
                 const dailyShift = getDailyShiftByIndex(weekShiftData, dayIndex);
                 if (dailyShift) {
                     renderDailyShift(dayCell, dailyShift);
@@ -375,8 +403,6 @@ function renderDailyShift(container: HTMLElement, daily: DailyShiftOut) {
         container.appendChild(aBadge);
     }
 }
-
-
 
 // // --- Logic: 月曜始まりのカレンダー計算 ---
 function calculateCalendarDates(year: number, month: number) {
@@ -606,8 +632,6 @@ function initApp(manager: shiftManager.ShiftManager) {
         // 2. 適用後の状態を再描画 (getMonthlyShiftの結果が変わるはず)
         renderCalendar(manager);
     };
-
-    // Config / Modal Controls (省略)
 
     // Config Controls
     document.getElementById('add-group-btn')!.onclick = () => addNewGroup(manager);

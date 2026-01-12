@@ -269,7 +269,7 @@ impl GuestShiftManager for AppState {
                 ShiftCalendarManager::new(
                     // TODO
                     // TODO
-                    2922, //base_abs_week,
+                    2926, //base_abs_week,
                     0 // initial_delta
                 )
             )
@@ -328,7 +328,7 @@ impl GuestShiftManager for AppState {
         }
     }
 
-    fn add_rule(&self) {
+    fn add_week(&self) {
         self
             .rules
             .borrow_mut()
@@ -461,7 +461,6 @@ impl GuestShiftManager for AppState {
         *self.month.borrow()
     }
 
-    /// 内部的に決定しているシフトを表示する
     fn get_monthly_shift(&self) -> Vec<Option<WeeklyShiftOut>> {
         let mut week_rule_table = 
             shift_calendar::shift_gen::WeekRuleTable::new();
@@ -498,6 +497,12 @@ impl GuestShiftManager for AppState {
             return Vec::new();
         };
 
+        log("get_monthly_shift");
+        log(&format!("カレンダー最上部は {}", gen_week_abs));
+        log(&format!("この月は　{}週間続きます", calculate_weeks_in_month(
+                    self.get_year() as i32,
+                    self.get_month())));
+
         self.schedule_data
             .borrow()
             .derive_shift(
@@ -518,9 +523,9 @@ impl GuestShiftManager for AppState {
             .collect()
     }
 
-    /// シフトを追加する
     fn apply_month_shift(&self, skip_flags: Vec<bool>) {
-        if let Some (gen_week_abs) = calculate_weeks_delta_from_base(
+        if let Some (gen_week_abs) =
+            calculate_weeks_delta_from_base(
             self.get_year() as i32,
             self.get_month(),
             1
@@ -533,6 +538,31 @@ impl GuestShiftManager for AppState {
                 log(&format!("error occured {:?}", e));
             };
         }
+    }
+
+    fn get_skip_flags(
+        &self
+    ) -> Vec<bool> {
+        let gen_week_abs = if let Some (a) = calculate_weeks_delta_from_base(
+            self.get_year() as i32,
+            self.get_month(),
+            1
+        ) { 
+            a
+        } else {
+            return Vec::new();
+        };
+        log(&format!("skip list:{:?}", self.schedule_data.borrow().get_timeline()));
+        self
+            .schedule_data
+            .borrow()
+            .get_skip_list_by_abs(
+                gen_week_abs,
+                calculate_weeks_in_month(
+                    self.get_year() as i32,
+                    self.get_month()
+                ) as usize
+            )
     }
 }
 
@@ -563,6 +593,9 @@ fn week_decided_shift_into_weekly_shift_out<'a>(week_decided_shift: &WeekDecided
     }
 }
 
+
+/// ある日がbase_weekから数えて何になるかを調べる関数
+/// month(0-11)
 fn calculate_weeks_delta_from_base(year: i32, month: u32, day: u32) -> Option<AbsWeek> {
     //     January 1970
     //          unix base
@@ -586,7 +619,7 @@ fn calculate_weeks_delta_from_base(year: i32, month: u32, day: u32) -> Option<Ab
     let date1 = NaiveDate::from_ymd_opt(1969, 12, 29)
         .unwrap() /* safe unwrap */;
 
-    if let Some(date2)  = NaiveDate::from_ymd_opt(year, month, day) {
+    if let Some(date2)  = NaiveDate::from_ymd_opt(year, month + 1, day) {
         let diff: Duration = date2 - date1;
         let weeks = diff.num_weeks();
 
@@ -631,19 +664,6 @@ pub fn calculate_weeks_in_month(year: i32, month: u32) -> u32 {
     // (日数 + オフセット) を 7 で割り、端数を切り上げる
     let total_cells = days_in_month + start_offset;
     (total_cells + 6) / 7
-}
-
-fn day_shift<'a>(
-    day_shift: &DayShiftIds
-) -> DayRule<'a, Incomplete> {
-    DayRule {
-        shift_morning: day_shift.m.iter().map(|i|
-            ShiftHoll::new(i.staff_group_id as usize, i.shift_staff_index as usize)
-        ).collect(),
-            shift_afternoon: day_shift.a.iter().map(|i|
-            ShiftHoll::new(i.staff_group_id as usize, i.shift_staff_index as usize)
-        ).collect(),
-    }
 }
 
 impl Guest for Component{

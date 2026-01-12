@@ -185,6 +185,9 @@ impl ShiftCalendarManager {
         }
         let append_start_index = self.timeline.len() - self.abs_to_index(target_abs_week)?;
 
+        log("apply_weeks");
+        log(&format!("skip_flagsの{}番目から追加します", append_start_index));
+        log(&format!("target_abs_week {} skip_flags {:?}", target_abs_week, skip_flags));
         for is_skipped in &skip_flags[append_start_index..] {
             self.append_week(*is_skipped);
         }
@@ -280,6 +283,43 @@ impl ShiftCalendarManager {
         if keep_len < self.timeline.len() {
             self.timeline.truncate(keep_len);
         }
+    }
+
+    pub fn get_skip_list_by_abs(
+        &self, 
+        abs_week: AbsWeek, 
+        range: usize
+    ) -> Vec<bool> {
+        if abs_week < self.timeline.len() {
+            if abs_week + range < self.timeline.len() {
+                self
+                    .timeline[abs_week..abs_week + range]
+                    .iter()
+                    .map(|a| matches!(a, WeekStatus::Skipped))
+                    .collect()
+            } else {
+                self
+                    .timeline[abs_week..]
+                    .iter()
+                    .map(|a| matches!(a, WeekStatus::Skipped))
+                    .collect()
+            }
+        } else {
+            Vec::new()
+        }
+       
+    }
+
+    pub fn get_skip_list(&self) -> Vec<bool> {
+        self
+            .timeline
+            .iter()
+            .map(|a| matches!(a, WeekStatus::Skipped))
+            .collect()
+    }
+
+    pub fn get_timeline(&self) -> &Vec<WeekStatus> {
+        &self.timeline
     }
 }
 
