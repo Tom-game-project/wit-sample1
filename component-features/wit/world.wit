@@ -53,19 +53,28 @@ interface shift-manager {
         shift-staff-index:u32, // シフトのルールを司るindex
     }
 
-    // 出力データ
+    // ================ 出力データ ====================
+    // シフト生成は以下に続く形式で返されます
 
-    record staff-pill {
+    record staff-pill-out {
         name: string,
         staff-group-id:u32,
         staff-index: u32,
     }
 
-    record daily-shift {
-        date: string, // "2026-01-08"
-        has-data: bool, // データが存在するか (skipなどでないか)
-        m: list<staff-pill>,  // 午前
-        a: list<staff-pill>,  // 午後
+    record daily-shift-out {
+        m: list<staff-pill-out>,  // 午前
+        a: list<staff-pill-out>,  // 午後
+    }
+
+    record weekly-shift-out {
+        mon: daily-shift-out,
+        tue: daily-shift-out,
+        wed: daily-shift-out,
+        thu: daily-shift-out,
+        fri: daily-shift-out,
+        sat: daily-shift-out,
+        sun: daily-shift-out,
     }
 
     resource shift-manager {
@@ -128,8 +137,10 @@ interface shift-manager {
         // 次の月
         change-next-month: func();
 
+        // AppStateの`rules`を取得
         get-rules: func() -> list<weekly-rule>;
 
+        // AppStateの`staff-group`を取得
         get-staff-groups: func() -> list<staff-group>;
 
         // year
@@ -137,6 +148,14 @@ interface shift-manager {
 
         // month
         get-month: func() -> u32;
+
+        // 現在のポインターが指すシフトを表示する
+        // year
+        // month
+        get-monthly-shift: func() -> list<option<weekly-shift-out>>;
+
+        apply-month-shift: func(skip-flags: list<bool>); // エラーを返す設計になる可能性もある
+
     }
 }
 

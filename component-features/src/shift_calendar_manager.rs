@@ -2,22 +2,20 @@
 use shift_calendar::{
     self,
     shift_gen::{
-        DayRule,
         Incomplete, 
-        ShiftHoll, 
-        StaffGroupList,  
-        WeekRule, 
+        StaffGroupList,
         WeekRuleTable,
         WeekDecidedShift,
         gen_one_week_shift,
     }
 };
 
+use crate::shift_gen::dummy::logger::logger::log;
+
 #[derive(Debug)]
 pub enum WeekStatus {
     Active { 
         logical_delta: LogicalDelta,
-        // week_decided: WeekDecidedShift<'a>
     },
     Skipped,
 }
@@ -47,18 +45,27 @@ pub enum AppendWeekErrorKind {
 
 impl ShiftCalendarManager {
 
-    pub fn new(base_abs_week: AbsWeek, initial_delta: LogicalDelta) -> Self {
+    pub fn new(
+        base_abs_week: AbsWeek, 
+        initial_delta: LogicalDelta
+    ) -> Self {
         // コンストラクターがエラーを判定
         Self { base_abs_week, initial_delta, timeline: Vec::new() }
     }
 
-    fn delta_to_abs(&self, delta: LogicalDelta) -> AbsWeek {
+    fn delta_to_abs(
+        &self,
+        delta: LogicalDelta
+    ) -> AbsWeek {
         let abs_week = delta + (self.base_abs_week - self.initial_delta);
 
         abs_week
     }
 
-    fn abs_to_delta(&self, abs_week: AbsWeek) -> Result<LogicalDelta, AppendWeekErrorKind> {
+    fn abs_to_delta(
+        &self,
+        abs_week: AbsWeek
+    ) -> Result<LogicalDelta, AppendWeekErrorKind> {
         if abs_week < (self.base_abs_week - self.initial_delta) {
             Err(AppendWeekErrorKind::UnderFlow)
         } else {
@@ -66,7 +73,10 @@ impl ShiftCalendarManager {
         }
     }
 
-    fn delta_to_index(&self, delta: LogicalDelta) -> Result<usize, AppendWeekErrorKind> {
+    fn delta_to_index(
+        &self,
+        delta: LogicalDelta
+    ) -> Result<usize, AppendWeekErrorKind> {
         if delta < self.initial_delta {
             Err(AppendWeekErrorKind::UnderFlow) // out of index
         }else{
@@ -74,7 +84,10 @@ impl ShiftCalendarManager {
         }
     }
 
-    fn abs_to_index(&self, abs_week: AbsWeek) -> Result<usize, AppendWeekErrorKind> {
+    fn abs_to_index(
+        &self, 
+        abs_week: AbsWeek
+    ) -> Result<usize, AppendWeekErrorKind> {
         self.delta_to_index(self.abs_to_delta(abs_week)?)
     }
 
@@ -121,13 +134,16 @@ impl ShiftCalendarManager {
     /// ```
     /// if self.timeline.len() < target_abs_week -> Error
     pub fn append_check(
-        &mut self,
+        &self,
         target_abs_week: AbsWeek,
         skip_flags: &[bool]
     ) -> Result<(), AppendWeekErrorKind> {
         if self.timeline.len() < self.abs_to_delta(target_abs_week)? {
             return Err(AppendWeekErrorKind::NotConsecutiveShifts);
         }
+
+        log(&format!("append check: {:?}", self.timeline[self.abs_to_index(target_abs_week)?..].iter().collect::<Vec<_>>()));
+        log(&format!("skip_flags {:?}", skip_flags));
 
         if self
             .timeline[self.abs_to_index(target_abs_week)?..]
@@ -145,6 +161,37 @@ impl ShiftCalendarManager {
         Ok(())
     }
 
+    /// checkをしてOkであればtimelineに適用する
+    /// self.append_check関数のチェックが入る
+    pub fn apply_weeks(
+        &mut self,
+        target_abs_week: AbsWeek,
+        skip_flags: &[bool]
+    ) -> Result<(), AppendWeekErrorKind> {
+
+        self.append_check(target_abs_week, skip_flags)?; // チェックをする
+        // target_abs_week: 2,
+        //  0, 1, 2  3  4  5  <- index
+        // [T, F, F]          <- timeline     .len() -> 3
+        //       [F, T, F, F] <- skip_flags
+        //         [ T, F, F] <- append_skip_flags
+        // 
+        //  let after_timeline_len = target_abs_week (2) + skip_flags.len() (4);
+        //  let append_len = after_timeline_len (6) - self.timeline.len() (3); (3)
+        //  let append_start_index = skip_flags.len() (4) - append_len (3); (1)     // append start index
+        //  let append_skip_flags = [append_start_index..]
+        if self.timeline.len() <  self.abs_to_index(target_abs_week)? {
+            return Err(AppendWeekErrorKind::UnderFlow);
+        }
+        let append_start_index = self.timeline.len() - self.abs_to_index(target_abs_week)?;
+
+        for is_skipped in &skip_flags[append_start_index..] {
+            self.append_week(*is_skipped);
+        }
+        Ok(())
+    }
+
+    /// 
     pub fn append_week(
         &mut self,
         is_skipped: bool,
@@ -213,7 +260,8 @@ impl ShiftCalendarManager {
     fn find_last_active_delta(&self) -> Option<LogicalDelta> {
         self.timeline.iter().rev().find_map(|slot| match slot {
             WeekStatus::Active {
-                logical_delta, } => Some(*logical_delta),
+                logical_delta, 
+            } => Some(*logical_delta),
             WeekStatus::Skipped => None,
         })
     }
@@ -235,7 +283,7 @@ impl ShiftCalendarManager {
     }
 }
 
-
+// ==================================== test ==================================== 
 #[cfg(test)]
 mod shift_calendar_manager {
     use crate::shift_calendar_manager::{AppendWeekErrorKind, ShiftCalendarManager};
@@ -311,7 +359,6 @@ mod shift_calendar_manager {
             StaffGroupList,  
             WeekRule, 
             WeekRuleTable,
-            WeekDecidedShift,
         }
     };
 
@@ -379,7 +426,11 @@ mod shift_calendar_manager {
     //         
     //     }
     // }
+    //
 
+    /// ```sh
+    /// cargo test shift_calendar_manager::test01 -- --nocapture
+    /// ```
     #[test]
     fn test01() {
 
@@ -438,6 +489,85 @@ mod shift_calendar_manager {
         shift_calendar_manager.append_week(false);
         shift_calendar_manager.append_week(true);
         shift_calendar_manager.append_week(false); // ここで設定されたら決定
+
+        assert!(matches!(r, Ok(())));
+
+        let gen_week_abs = 2000; // 生成をしたい週の最初
+        let gen_range = 5;       // 何週間分
+        // 内部的にはシフトは決定済み
+        let a = shift_calendar_manager
+            .derive_shift(
+                &week_rule_table,
+                &staff_group_list, 
+                gen_week_abs, 
+                gen_range
+            );
+
+        for i in a {
+            println!("Week Shift");
+            if let Some(week) = i {
+                println!("{:?}", week);
+            } else {
+                println!("----------------------------");
+            }
+        }
+        println!("finish!");
+    }
+
+    /// ```sh
+    /// cargo test shift_calendar_manager::test02 -- --nocapture
+    /// ```
+    #[test]
+    fn test02() {
+
+        let mut shift_calendar_manager 
+            = ShiftCalendarManager::new(2000, 0);
+
+        let week_rule0 = week_rule![
+            mon: m[a0, b0],  a[b1],
+            tue: m[],        a[a1],
+            wed: m[],        a[],
+            thu: m[b4],      a[],
+            fri: m[b5, b2],  a[a3, b3, a2],
+            sat: m[],        a[],
+            sun: m[],        a[],
+        ];
+        let week_rule1 = week_rule![
+            mon: m[a2, b3],  a[b2],
+            tue: m[],        a[b4],
+            wed: m[],        a[],
+            thu: m[a1],      a[],
+            fri: m[b1, b3],  a[b5, a0, b0],
+            sat: m[],        a[],
+            sun: m[],        a[],
+        ];
+
+        let week_rule_table = WeekRuleTable(vec![week_rule0, week_rule1]);
+
+        // Read Staff info from test.toml file
+        let s = std::fs::read_to_string("test.toml").unwrap();
+        let groups: Config = toml::from_str(&s).unwrap();
+        let mut staff_group_a = StaffGroup::new("group a");
+
+        for name in &groups["A"].staff {
+            staff_group_a.add_staff(name);
+        }
+        let mut staff_group_b = StaffGroup::new("group b");
+        for name in &groups["B"].staff {
+            staff_group_b.add_staff(name);
+        }
+
+        let mut staff_group_list = StaffGroupList::new();
+
+        staff_group_list.add_staff_group(staff_group_a);
+        staff_group_list.add_staff_group(staff_group_b);
+
+        let r = shift_calendar_manager.apply_weeks(2000, &[
+            false,
+            false,
+            true,
+            false
+        ]);
 
         assert!(matches!(r, Ok(())));
 

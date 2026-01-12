@@ -10,28 +10,22 @@ use exports::component::component_features::shift_manager::{
     ShiftTime,
     GuestShiftManager,
     Guest,
-    // staff group data
+    // ==== staff group data ====
     StaffGroup,
     StaffInfo,
-    // weekly rule data
+    // ==== weekly rule data ====
     WeeklyRule,
     WeekSchedule,
     DayShiftIds,
     Holl,
-    //
-    
+    // ==== out ====
+    WeeklyShiftOut
 };
 
 use shift_calendar::{
     self,
     shift_gen::{
-        DayRule,
-        Incomplete, 
-        ShiftHoll, 
-        StaffGroupList,  
-        WeekRule, 
-        WeekRuleTable,
-        gen_one_week_shift
+        DayDecidedShift, DayRule, Incomplete, ShiftHoll, Staff, WeekDecidedShift, WeekRule 
     }
 };
 
@@ -39,9 +33,20 @@ use std::{
     cell::RefCell,
 };
 
-use crate::shift_calendar_manager::{ShiftCalendarManager};
+use crate::{
+    shift_calendar_manager::{
+        AbsWeek, 
+        ShiftCalendarManager
+    },
+    shift_manager::exports::component::component_features::shift_manager::{
+        DailyShiftOut, 
+        StaffPillOut
+    }
+};
 
 use crate::shift_gen::dummy::logger::logger::log;
+
+use chrono::{NaiveDate, Duration, Datelike};
 
 // --------------------------------------------------------
 // 1. Staff Groups Definition
@@ -161,7 +166,7 @@ impl WeekSchedule {
 }
 
 impl ShiftWeekday {
-    fn extract_day_shift_ids<'a>(&self, week_schedule: &'a WeekSchedule) -> &'a DayShiftIds{
+    fn extract_day_shift_ids<'a>(&self, week_schedule: &'a WeekSchedule) -> &'a DayShiftIds {
         match self {
             ShiftWeekday::Mon => &week_schedule.mon,
             ShiftWeekday::Tue => &week_schedule.tue,
@@ -209,6 +214,14 @@ impl DayShiftIds {
     fn new() -> Self {
         Self { m: vec![], a: vec![] }
     }
+
+    /// shift_calendarが処理できる型に変換する
+    fn day_shift_ids_into_day_rule<'a>(&self) -> DayRule<'a, Incomplete> {
+        DayRule {
+            shift_morning: self.m.iter().map(|h| h.into_shift_holl()).collect(),
+            shift_afternoon: self.a.iter().map(|h| h.into_shift_holl()).collect(),
+        }
+    }
 }
 
 // シフトホール
@@ -217,29 +230,13 @@ impl DayShiftIds {
 //     shift_staff_index:u32, // シフトのルールを司るindex
 // }
 
-// --------------------------------------------------------
-// 3. Calendar Data Definition
-// --------------------------------------------------------
-// カレンダーは ID("a0") ではなく、解決済みのオブジェクト(名前+色ID)を持ちます
-struct CalendarEntry {
-    m: ResolvedWeekly, // morning
-    a: ResolvedWeekly, // afternoon
-}
-
-struct ResolvedWeekly {
-    mon: ResolvedStaff,
-    tue: ResolvedStaff,
-    wed: ResolvedStaff,
-    thu: ResolvedStaff,
-    fri: ResolvedStaff,
-    sat: ResolvedStaff,
-    sun: ResolvedStaff,
-}
-
-struct ResolvedStaff {
-    name: String,      // スタッフの名前
-    staff_group_id: u32,    // スタッフグループのindex
-    staff_slot_index: u32,  // 対象スタッフのスタッフグループ内でのindex
+impl Holl {
+    fn into_shift_holl<'a>(&self) -> ShiftHoll<'a, Incomplete> {
+        ShiftHoll::new(
+            self.staff_group_id as usize,
+            self.shift_staff_index as usize
+        )
+    }
 }
 
 // --------------------------------------------------------
@@ -272,8 +269,8 @@ impl GuestShiftManager for AppState {
                 ShiftCalendarManager::new(
                     // TODO
                     // TODO
-                    2923, //base_abs_week,
-                    25 // initial_delta
+                    2922, //base_abs_week,
+                    0 // initial_delta
                 )
             )
         }
@@ -448,26 +445,204 @@ impl GuestShiftManager for AppState {
         }
     }
 
-    fn get_rules(&self,) -> Vec<WeeklyRule> {
+    fn get_rules(&self) -> Vec<WeeklyRule> {
         self.rules.borrow().clone()
     }
 
-    fn get_staff_groups(&self,) -> Vec<StaffGroup> {
+    fn get_staff_groups(&self) -> Vec<StaffGroup> {
         self.staff_groups.borrow().clone()
     }
 
-    fn get_year(&self,) -> u32 {
+    fn get_year(&self) -> u32 {
         *self.year.borrow()
     }
 
-    fn get_month(&self,) -> u32 {
+    fn get_month(&self) -> u32 {
         *self.month.borrow()
     }
 
+    /// 内部的に決定しているシフトを表示する
+    fn get_monthly_shift(&self) -> Vec<Option<WeeklyShiftOut>> {
+        log("get_monthly_shift called");
+        let mut week_rule_table = 
+            shift_calendar::shift_gen::WeekRuleTable::new();
+        let mut staff_group_list = 
+            shift_calendar::shift_gen::StaffGroupList::new();
+        for i in self.get_rules() {
+            week_rule_table.add_week_rule(WeekRule([
+                i.schedule.mon.day_shift_ids_into_day_rule(),
+                i.schedule.tue.day_shift_ids_into_day_rule(),
+                i.schedule.wed.day_shift_ids_into_day_rule(),
+                i.schedule.thu.day_shift_ids_into_day_rule(),
+                i.schedule.fri.day_shift_ids_into_day_rule(),
+                i.schedule.sat.day_shift_ids_into_day_rule(),
+                i.schedule.sun.day_shift_ids_into_day_rule(),
+            ]));
+        }
+
+        for i in self.get_staff_groups() {
+            let mut staff_group = 
+                shift_calendar::shift_gen::StaffGroup::new(&i.name);
+            for j in &i.slots {
+                staff_group.add_staff(&j.name);
+            }
+            staff_group_list.add_staff_group(staff_group);
+        }
+
+        let gen_week_abs = if let Some (a) = calculate_weeks_delta_from_base(
+            self.get_year() as i32,
+            self.get_month(),
+            1
+        ) { 
+            a
+        } else {
+            return Vec::new();
+        };
+
+        log(&format!("gen range ------- {} ---------", 
+                calculate_weeks_in_month(
+                    self.get_year() as i32,
+                    self.get_month())
+
+                ));
+        self.schedule_data
+            .borrow()
+            .derive_shift(
+                &week_rule_table,
+                &staff_group_list,
+                gen_week_abs,
+                calculate_weeks_in_month(
+                    self.get_year() as i32,
+                    self.get_month()) as usize
+            )
+            .iter()
+            .map(|a| {
+                a.as_ref().map(|b| 
+                    week_decided_shift_into_weekly_shift_out(&b)
+                )
+            }
+            )
+            .collect()
+    }
+
+    /// シフトを追加する
+    fn apply_month_shift(&self, skip_flags: Vec<bool>) {
+        log("apply_month_shift called");
+        if let Some (gen_week_abs) = calculate_weeks_delta_from_base(
+            self.get_year() as i32,
+            self.get_month(),
+            1
+        ) {
+            // TODO: Err処理をするapi設計に変える
+            if let Err(e) = self.schedule_data.borrow_mut().apply_weeks(
+                gen_week_abs, 
+                &skip_flags
+            ) {
+                log(&format!("error occured {:?}", e));
+            };
+        }
+    }
 }
 
-fn day_shift<'a>(day_shift: 
-    &DayShiftIds
+fn staff_into_staff_pill_out (staff: &Staff) -> StaffPillOut {
+    StaffPillOut { 
+        name: staff.name.clone(),
+        staff_group_id: staff.group_id as u32, 
+        staff_index: staff.id as u32
+    }
+}
+
+fn day_decided_shift_into_daily_shift_out (day_decided_shift: &DayDecidedShift) -> DailyShiftOut {
+    DailyShiftOut {
+        m: day_decided_shift.shift_morning.iter().map(|staff| staff_into_staff_pill_out(staff)).collect(), 
+        a: day_decided_shift.shift_afternoon.iter().map(|staff| staff_into_staff_pill_out(staff)).collect()
+    }
+}
+
+fn week_decided_shift_into_weekly_shift_out<'a>(week_decided_shift: &WeekDecidedShift<'a>) -> WeeklyShiftOut {
+    WeeklyShiftOut { 
+        mon:day_decided_shift_into_daily_shift_out(&week_decided_shift.0[0]),
+        tue:day_decided_shift_into_daily_shift_out(&week_decided_shift.0[1]), 
+        wed:day_decided_shift_into_daily_shift_out(&week_decided_shift.0[2]),
+        thu:day_decided_shift_into_daily_shift_out(&week_decided_shift.0[3]), 
+        fri:day_decided_shift_into_daily_shift_out(&week_decided_shift.0[4]), 
+        sat:day_decided_shift_into_daily_shift_out(&week_decided_shift.0[5]), 
+        sun:day_decided_shift_into_daily_shift_out(&week_decided_shift.0[6]) 
+    }
+}
+
+fn calculate_weeks_delta_from_base(year: i32, month: u32, day: u32) -> Option<AbsWeek> {
+    //     January 1970
+    //          unix base
+    //          v
+    // Mo Tu We Th Fr Sa Su
+    //           1  2  3  4 < base week = 0
+    //  5  6  7  8  9 10 11               1
+    // 12 13 14 15 16 17 18               2
+    // 19 20 21 22 23 24 25               :
+    // 26 27 28 29 30 31
+    //
+    // 1969/12/29 as week base
+
+    // (unix_base_week: number,week_delta:  number)  Mo Tu We Th Fr Sa Su
+    // (unix_base_week: 0,week_delta:            0)           1  2  3  4
+    // (unix_base_week: 1,week_delta:            1)  5  6  7  8  9 10 11
+    // (unix_base_week: 2,week_delta:         skip) 12 13 14 15 16 17 18
+    // (unix_base_week: 3,week_delta:            2) 19 20 21 22 23 24 25
+    // (unix_base_week: 4,week_delta:            3) 26 27 28 29 30 31
+
+    let date1 = NaiveDate::from_ymd_opt(1969, 12, 29)
+        .unwrap() /* safe unwrap */;
+
+    if let Some(date2)  = NaiveDate::from_ymd_opt(year, month, day) {
+        let diff: Duration = date2 - date1;
+        let weeks = diff.num_weeks();
+
+        if weeks < 0 {
+            None
+        } else {
+            Some(weeks as usize) 
+        }
+        
+    } else {
+        None
+    }
+}
+
+/// 指定された年・月が、カレンダー上で何週（何行）になるかを計算する
+/// ※ month: 0 (1月) 〜 11 (12月)
+/// ※ 月曜始まり (Monday start) 前提
+pub fn calculate_weeks_in_month(year: i32, month: u32) -> u32 {
+    // 1. その月の1日を取得
+    // NaiveDate は 1-12 月を期待するため、引数 month(0-11) に +1 する
+    let first_day = NaiveDate::from_ymd_opt(year, month + 1, 1)
+        .expect("Invalid date provided (month should be 0-11)");
+
+    // 2. その月の日数を計算
+    // 翌月の1日を取得して差分を取る
+    // month が 11 (12月) の場合は翌年、それ以外は同じ年の month + 2 月
+    let next_month_date = if month == 11 {
+        NaiveDate::from_ymd_opt(year + 1, 1, 1).unwrap()
+    } else {
+        NaiveDate::from_ymd_opt(year, month + 2, 1).unwrap()
+    };
+    
+    let days_in_month = next_month_date
+        .signed_duration_since(first_day)
+        .num_days() as u32;
+
+    // 3. 1日の曜日オフセットを取得 (月曜=0, 火曜=1, ..., 日曜=6)
+    // 月曜始まりのカレンダーにおける「第1週の空白の数」
+    let start_offset = first_day.weekday().num_days_from_monday();
+
+    // 4. 週数を計算
+    // (日数 + オフセット) を 7 で割り、端数を切り上げる
+    let total_cells = days_in_month + start_offset;
+    (total_cells + 6) / 7
+}
+
+fn day_shift<'a>(
+    day_shift: &DayShiftIds
 ) -> DayRule<'a, Incomplete> {
     DayRule {
         shift_morning: day_shift.m.iter().map(|i|
@@ -478,42 +653,6 @@ fn day_shift<'a>(day_shift:
         ).collect(),
     }
 }
-
-/*
-fn generate_shift(
-        weekly_rule: &[WeeklyRule],
-        staff_groups: &[StaffGroup],
-        week_delta: usize
-    ) ->  {
-    let mut staff_group_list = StaffGroupList::new();
-    for i in staff_groups {
-        let mut staff_group = shift_calendar::shift_gen::StaffGroup::new(&i.name);
-
-        for name in &i.slots {
-            staff_group.add_staff(&name.name);
-        }
-        staff_group_list.add_staff_group(staff_group);
-    }
-
-    let mut week_rule_table = WeekRuleTable::new();
-
-    for i in weekly_rule {
-        let week_rule = WeekRule([
-            day_shift(&i.schedule.mon),
-            day_shift(&i.schedule.tue),
-            day_shift(&i.schedule.wed),
-            day_shift(&i.schedule.thu),
-            day_shift(&i.schedule.fri),
-            day_shift(&i.schedule.sat),
-            day_shift(&i.schedule.sun),
-        ]);
-        week_rule_table.add_week_rule(week_rule);
-    }
-
-    let week_decided_shift = gen_one_week_shift(&week_rule_table, &staff_group_list, week_delta);
-}
-
-*/
 
 impl Guest for Component{
     type ShiftManager = AppState;

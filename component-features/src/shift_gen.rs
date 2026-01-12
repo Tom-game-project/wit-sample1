@@ -121,11 +121,15 @@ impl Guest for Component {
             let diff: Duration = date2 - date1;
             let weeks = diff.num_weeks();
 
-            Some(weeks)
+            if weeks < 0 {
+                None
+            } else {
+                Some(weeks)
+            }
+            
         } else {
             None
         }
-       
     }
 }
 
