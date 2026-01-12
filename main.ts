@@ -226,87 +226,9 @@ function closeModal() {
    4. RENDER FUNCTIONS (描画関数)
    ========================================================================== */
 
-// TODO
-// TODO
-/*
-function renderCalendar(state: shiftManager.ShiftManager) {
-    const mount = document.getElementById('calendar-mount')!;
-    const label = document.getElementById('current-month-label')!;
-    const year = state.getYear();
-    const month = state.getMonth();
-
-    label.textContent = new Date(year, month, 1).toLocaleDateString('en-US', { year: 'numeric', month: 'long' });
-
-    const firstDay = new Date(year, month, 1).getDay();
-    const startOffset = (firstDay === 0 ? 6 : firstDay - 1);
-    const totalDays = new Date(year, month + 1, 0).getDate();
-    
-    const thead = el('thead', {}, el('tr', {},
-        el('th', {}, 'MON'), el('th', {}, 'TUE'), el('th', {}, 'WED'),
-        el('th', {}, 'THU'), el('th', {}, 'FRI'), el('th', {style:{color:'#e67e22'}}, 'SAT'),
-        el('th', {style:{color:'#e74c3c'}}, 'SUN')
-    ));
-
-    const tbody = el('tbody');
-    let tr = el('tr');
-    let count = 0;
-
-    for (let i = 0; i < startOffset; i++) { 
-            tr.appendChild(el('td', { className: 'diff-month' })); 
-            count++; 
-    }
-
-    const today = new Date();
-    for (let d = 1; d <= totalDays; d++) {
-        if (count % 7 === 0 && count !== 0) { tbody.appendChild(tr); tr = el('tr'); }
-        
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-        const dayData = state.scheduleData[dateStr] || { m: [], a: [] };
-
-        // state.getRuleAssignment(ruleIdx, day, shiftTime)
-
-        const cellContent = [];
-        cellContent.push(el('span', { className: 'date-label' }, d));
-
-        [ShiftTimeConst.Morning , ShiftTimeConst.Afternoon].forEach(shiftType => {
-            let holl_list = state.getRuleAssignment(, day, shiftType);
-            if (holl_list && holl_list.length > 0) {
-                const chips = holl_list.map(s => el('span', { 
-                    className: 'staff-chip', 
-                    style:{borderLeftColor:getGroupColor(s.staffGroupId)}, title: s.name 
-                }, s.name));
-                cellContent.push(el('div', { className: 'shift-section' }, 
-                    el('div', { className: 'shift-label' }, shiftType === ShiftTimeConst.Morning ? 'AM' : 'PM'), ...chips
-                ));
-            }
-        });
-
-        const td = el('td', {}, ...cellContent);
-        if (today.getFullYear()===year && today.getMonth()===month && today.getDate()===d) td.classList.add('today');
-        tr.appendChild(td);
-        count++;
-    }
-    while (count % 7 !== 0) { tr.appendChild(el('td', { className: 'diff-month' })); count++; }
-    tbody.appendChild(tr);
-
-    mount.replaceChildren(el('table', { className: 'calendar-table' }, thead, tbody));
-}
-*/
-
 // --- Imports (Wasm generated files) ---
 // import { generateMonthlyView } from "./shift_engine.js"; 
 // ※ 実際はjco等で生成されたファイルをimportします
-
-// --- State Management ---
-
-
-// --- Calendar Logic ---
-interface AppState {
-    year: number;
-    month: number; // 1-12
-    weekSkipState: Record<string, boolean>; // key: "YYYY-Wxx", value: isActive
-    baseDelta: number;
-}
 
 // --- Global State for UI Control ---
 // Wasmに反映する前のチェックボックスの状態を一時保持するリスト
@@ -352,12 +274,11 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
         // Wasm上のデータ (Generateされていれば存在する)
         // Wasm側で option<weekly-shift-out> なので、TS側では undefined チェックが必要
         const weekShiftData = shiftList[index]; 
-        console.log("weekShiftData", weekShiftData)
 
         // 行コンテナ
         // UIでスキップ選択中、またはWasmデータが無い(None)場合は skipped スタイル
         const row = document.createElement('div');
-        const visualActive = isUiActive && (weekShiftData !== undefined);
+        const visualActive = (weekShiftData !== undefined);
         row.className = `cal-week-row ${visualActive ? 'active' : 'skipped'}`;
 
         // --- [左列] コントロール ---
@@ -678,13 +599,12 @@ function initApp(manager: shiftManager.ShiftManager) {
             // 1. UIで設定されたフラグリスト(pendingSkipFlags)をWasmに渡す
             //    WIT定義: apply-month-shift: func(skip-flags: list<bool>)
             manager.applyMonthShift(pendingSkipFlags);
-
-            // 2. 適用後の状態を再描画 (getMonthlyShiftの結果が変わるはず)
-            renderCalendar(manager);
         } catch (e) {
             console.error("Failed to generate shift:", e);
             alert("シフト生成に失敗しました");
         }
+        // 2. 適用後の状態を再描画 (getMonthlyShiftの結果が変わるはず)
+        renderCalendar(manager);
     };
 
     // Config / Modal Controls (省略)

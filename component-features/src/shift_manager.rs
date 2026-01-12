@@ -463,7 +463,6 @@ impl GuestShiftManager for AppState {
 
     /// 内部的に決定しているシフトを表示する
     fn get_monthly_shift(&self) -> Vec<Option<WeeklyShiftOut>> {
-        log("get_monthly_shift called");
         let mut week_rule_table = 
             shift_calendar::shift_gen::WeekRuleTable::new();
         let mut staff_group_list = 
@@ -499,12 +498,6 @@ impl GuestShiftManager for AppState {
             return Vec::new();
         };
 
-        log(&format!("gen range ------- {} ---------", 
-                calculate_weeks_in_month(
-                    self.get_year() as i32,
-                    self.get_month())
-
-                ));
         self.schedule_data
             .borrow()
             .derive_shift(
@@ -527,7 +520,6 @@ impl GuestShiftManager for AppState {
 
     /// シフトを追加する
     fn apply_month_shift(&self, skip_flags: Vec<bool>) {
-        log("apply_month_shift called");
         if let Some (gen_week_abs) = calculate_weeks_delta_from_base(
             self.get_year() as i32,
             self.get_month(),

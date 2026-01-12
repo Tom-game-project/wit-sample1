@@ -44,7 +44,6 @@ fn day_shift<'a>(day_shift:
 
 impl Guest for Component {
     fn to_upper(input:String) -> String {
-        //log(&format!("{:?}", a));
 
         log(&format!("経過週数: {}", 
             Component::calculate_weeks_delta_from_base(1970, 1, 5).unwrap()
