@@ -1,36 +1,36 @@
 :root {
---bg-color: #f4f6f8;
---surface: #ffffff;
---text-main: #333;
---text-sub: #666;
---border: #e0e0e0;
---primary: #4a90e2;
---danger: #e74c3c;
---header-bg: #34495e;
---header-text: #fff;
---nav-height: 60px;
+  --bg-color: #f4f6f8;
+  --surface: #ffffff;
+  --text-main: #333;
+  --text-sub: #666;
+  --border: #e0e0e0;
+  --primary: #4a90e2;
+  --danger: #e74c3c;
+  --header-bg: #34495e;
+  --header-text: #fff;
+  --nav-height: 60px;
 }
 
 /* --- Global Layout --- */
 html, body {
-height: 100%; margin: 0; padding: 0;
-font-family: "Helvetica Neue", Arial, sans-serif;
-background-color: var(--bg-color); color: var(--text-main);
-overflow: hidden;
+  height: 100%; margin: 0; padding: 0;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--bg-color); color: var(--text-main);
+  overflow: hidden;
 }
 
 /* --- Header --- */
 .app-header {
-height: var(--nav-height); background: var(--surface); border-bottom: 1px solid var(--border);
-display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-sizing: border-box;
-z-index: 10; position: relative;
+  height: var(--nav-height); background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 20px; box-sizing: border-box;
+  z-index: 10; position: relative;
 }
 .app-title { font-size: 1.2rem; font-weight: bold; }
 
 .view-switcher { display: flex; background: #f0f2f5; padding: 4px; border-radius: 8px; }
 .view-btn {
-border: none; background: transparent; padding: 8px 20px; border-radius: 6px;
-cursor: pointer; font-size: 0.9rem; font-weight: 600; color: var(--text-sub); transition: all 0.2s;
+  border: none; background: transparent; padding: 8px 20px; border-radius: 6px;
+  cursor: pointer; font-size: 0.9rem; font-weight: 600; color: var(--text-sub); transition: all 0.2s;
 }
 .view-btn.active { background: var(--surface); color: var(--primary); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
 .view-btn:hover:not(.active) { background: rgba(0,0,0,0.05); }
@@ -39,14 +39,14 @@ cursor: pointer; font-size: 0.9rem; font-weight: 600; color: var(--text-sub); tr
 .main-viewport { height: calc(100% - var(--nav-height)); position: relative; width: 100%; background: var(--bg-color); }
 
 .view-section {
-position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-overflow-y: auto; padding: 20px; box-sizing: border-box;
-opacity: 0; visibility: hidden; transition: opacity 0.2s; background: var(--bg-color);
+  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+  overflow-y: auto; padding: 20px; box-sizing: border-box;
+  opacity: 0; visibility: hidden; transition: opacity 0.2s; background: var(--bg-color);
 }
 .view-section.active-view { opacity: 1; visibility: visible; z-index: 1; }
 .container { max-width: 1400px; margin: 0 auto; padding-bottom: 40px; }
 
-/* --- Components --- */
+/* --- UI Components --- */
 .btn { border: none; padding: 8px 12px; border-radius: 4px; cursor: pointer; font-size: 0.9em; transition: opacity 0.2s; }
 .btn:hover { opacity: 0.9; }
 .btn-primary { background: var(--primary); color: white; }
@@ -55,6 +55,7 @@ opacity: 0; visibility: hidden; transition: opacity 0.2s; background: var(--bg-c
 .btn-sm { padding: 4px 8px; font-size: 0.8em; }
 .section-box { margin-bottom: 40px; }
 h2 { border-bottom: 2px solid #ccc; padding-bottom: 5px; margin-top: 10px; font-size: 1.2rem; }
+pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: monospace; }
 
 /* --- Config Styles --- */
 .groups-container { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
@@ -76,40 +77,122 @@ table.config-table { width: 100%; border-collapse: collapse; min-width: 900px; }
 .add-btn-mini { display: block; width: 100%; margin-top: 5px; border: 1px dashed #ccc; background: none; color: #999; cursor: pointer; font-size: 0.8em; padding: 2px; }
 .add-btn-mini:hover { background: #eee; color: #333; }
 .chip { display: inline-block; padding: 3px 8px; margin: 2px; border-radius: 4px; font-size: 0.8em; color: white; cursor: pointer; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.1); border: 1px solid rgba(0,0,0,0.1); }
-pre { background: #2d2d2d; color: #ccc; padding: 15px; border-radius: 5px; overflow-x: auto; font-family: monospace; }
 
-/* --- Calendar Styles --- */
+/* --- Calendar Controls --- */
 .calendar-controls-bar {
-display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
-background: var(--surface); padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-flex-wrap: wrap; gap: 10px;
+  display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;
+  background: var(--surface); padding: 15px 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+  flex-wrap: wrap; gap: 10px;
 }
-
 .month-nav { display: flex; gap: 10px; align-items: center; }
 .month-label { font-size: 1.5rem; font-weight: bold; min-width: 200px; text-align: center; }
 .nav-btn { background: none; border: 1px solid var(--border); padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 1rem; }
 .nav-btn:hover { background: #eee; }
 
-/* Generator Controls */
 .generator-controls {
-display: flex; gap: 10px; align-items: center; background: #f9f9f9; padding: 5px 10px; border-radius: 6px; border: 1px solid #eee;
+  display: flex; gap: 10px; align-items: center; background: #f9f9f9; padding: 5px 10px; border-radius: 6px; border: 1px solid #eee;
 }
 .generator-select { padding: 6px; border-radius: 4px; border: 1px solid #ccc; font-size: 0.9em; }
 
-.calendar-table { width: 100%; border-collapse: collapse; table-layout: fixed; background: var(--surface); box-shadow: 0 4px 10px rgba(0,0,0,0.05); border-radius: 8px; overflow: hidden; }
-.calendar-table th { background: #4a90e2; color: #fff; padding: 10px; text-align: center; font-weight: bold; border: 1px solid #357abd; }
-.calendar-table td { border: 1px solid var(--border); vertical-align: top; height: 120px; padding: 5px; background: #fff; }
-.calendar-table td.diff-month { background-color: #f4f4f4; color: #ccc; }
-
-.date-label { display: block; text-align: right; font-size: 0.9em; margin-bottom: 5px; font-weight: bold; color: var(--text-sub); }
-.today .date-label { color: var(--primary); text-decoration: underline; }
-.shift-section { margin-bottom: 4px; font-size: 0.8em; }
-.shift-label { font-size: 0.7em; text-transform: uppercase; color: #999; font-weight: bold; margin-bottom: 2px; border-bottom: 1px solid #eee; }
-.staff-chip { 
-display: inline-block; font-size: 1.25em; padding: 2px 6px; margin: 1px; border-radius: 4px; 
-background: #eee; color: #333; border-left: 4px solid #999; white-space: nowrap; 
-overflow: hidden; text-overflow: ellipsis; max-width: 100%; box-sizing: border-box; cursor: default; 
+/* --- Calendar Grid System (8-column layout) --- */
+/* データ行 */
+.cal-week-row {
+  display: grid;
+  /* 左端(120px) + 7日間(等分) */
+  grid-template-columns: 120px repeat(7, 1fr);
+  border-bottom: 1px solid #eee;
+  background: #fff;
 }
+
+/* 左端：制御列 */
+.cal-cell-control {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border-right: 2px solid #ddd;
+  background-color: #fafafa;
+}
+
+/* 右側：日付セル */
+.cal-cell-day {
+  min-height: 100px;
+  padding: 5px;
+  border-right: 1px solid #f0f0f0;
+  position: relative;
+  font-size: 0.9em;
+}
+
+.cal-cell-day .date-num {
+  font-weight: bold;
+  margin-bottom: 4px;
+  display: block;
+  color: var(--text-sub);
+}
+
+/* --- Row Status Colors (Background & Border) --- */
+.cal-week-row.status-decided { border-left: 5px solid #4CAF50; background-color: #f1f8e9; } /* FIXED (Green) */
+.cal-week-row.status-active  { border-left: 5px solid #2196F3; } /* READY (Blue) */
+.cal-week-row.status-skipped { border-left: 5px solid #bdbdbd; background-color: #fafafa; opacity: 0.8; } /* SKIP (Grey) */
+
+.cal-week-row.status-skipped-fixed { 
+  border-left: 5px solid #616161; 
+  background-color: #eeeeee; 
+  /* 確定済みスキップのストライプ表現 */
+  background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px);
+}
+
+/* --- Status Text Colors (used in main.ts) --- */
+.text-fixed-active   { color: #2e7d32; }
+.text-fixed-skipped  { color: #616161; }
+.text-pending-active { color: #1565c0; }
+.text-pending-skipped{ color: #9e9e9e; }
+
+/* --- Shift Slots --- */
+.shift-slot {
+  display: block;
+  font-size: 0.75em;
+  padding: 2px 4px;
+  margin-bottom: 2px;
+  border-radius: 3px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.slot-morning { background-color: #e3f2fd; border-left: 3px solid #2196F3; }
+.slot-afternoon { background-color: #fff3e0; border-left: 3px solid #ff9800; }
+
+/* --- Switch UI --- */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 22px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #ccc;
+  transition: .4s;
+  border-radius: 22px;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 16px; width: 16px;
+  left: 3px; bottom: 3px;
+  background-color: white;
+  transition: .4s;
+  border-radius: 50%;
+}
+input:checked + .slider { background-color: #2196F3; }
+input:checked + .slider:before { transform: translateX(22px); }
+/* Disabled state for fixed shifts */
+input:disabled + .slider { background-color: #e0e0e0; cursor: not-allowed; }
 
 /* --- Modal --- */
 .modal { display: none; position: fixed; z-index: 100; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; }
@@ -121,142 +204,11 @@ overflow: hidden; text-overflow: ellipsis; max-width: 100%; box-sizing: border-b
 
 /* --- Print Styles --- */
 @media print {
-.app-header, .view-switcher, .month-nav button, .generator-controls, .add-btn-mini, .btn, #view-config, #modal { display: none !important; }
-* { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-html, body, .main-viewport, .view-section, .container { height: auto !important; overflow: visible !important; width: 100% !important; margin: 0 !important; }
-.calendar-controls-bar { box-shadow: none; border: none; padding: 0; margin-bottom: 10px; justify-content: center; }
-.calendar-table { box-shadow: none; border: none; }
-@page { size: landscape; margin: 10mm; }
-body { zoom: 0.85; }
-}
-
-
-
-/* カレンダー全体枠 */
-.calendar-grid-container {
-    border: 1px solid #ddd;
-    background: #fff;
-    margin-top: 10px;
-}
-
-/* ヘッダー行 (Grid Layout) */
-.cal-header-row {
-    display: grid;
-    /* 左端(120px) + 7日間(等分) */
-    grid-template-columns: 120px repeat(7, 1fr);
-    background-color: #f8f9fa;
-    border-bottom: 2px solid #ddd;
-    font-weight: bold;
-    color: #555;
-}
-
-.cal-cell-header {
-    padding: 10px;
-    text-align: center;
-    border-right: 1px solid #eee;
-}
-
-/* データ行 (Grid Layout) */
-.cal-week-row {
-    display: grid;
-    grid-template-columns: 120px repeat(7, 1fr);
-    border-bottom: 1px solid #eee;
-}
-
-/* 左端：制御列 */
-.cal-cell-control {
-    padding: 10px;
-    display: flex;
-    flex-direction: column; /* 縦並び: チェックボックス, ラベル */
-    align-items: center;
-    justify-content: center;
-    border-right: 2px solid #ddd; /* 区切り線を強調 */
-    background-color: #fafafa;
-}
-
-/* 右側：日付セル */
-.cal-cell-day {
-    min-height: 80px; /* ある程度の高さを確保 */
-    padding: 5px;
-    border-right: 1px solid #f0f0f0;
-    position: relative;
-}
-
-.cal-cell-day .date-num {
-    font-weight: bold;
-    margin-bottom: 4px;
-    display: block;
-}
-
-/* 状態ごとのスタイル */
-.cal-week-row.skipped {
-    background-color: #f4f4f4; /* 全体をグレーアウト */
-    color: #aaa;
-}
-.cal-week-row.skipped .cal-cell-day {
-    background-color: repeating-linear-gradient(
-        45deg,
-        #f4f4f4,
-        #f4f4f4 10px,
-        #eeeeee 10px,
-        #eeeeee 20px
-    ); /* 斜線エフェクトなど */
-}
-
-/* シフトバッジ */
-.shift-badge {
-    font-size: 0.8rem;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-top: 5px;
-    color: white;
-    text-align: center;
-}
-.shift-badge.active { background-color: #007bff; }
-.shift-badge.skipped { background-color: #999; }
-
-/* スイッチのラッパー */
-.switch {
-    position: relative;
-    display: inline-block;
-    width: 44px;
-    height: 22px;
-}
-
-.switch input { opacity: 0; width: 0; height: 0; }
-
-.slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background-color: #ccc;
-    transition: .4s;
-    border-radius: 22px;
-}
-
-.slider:before {
-    position: absolute;
-    content: "";
-    height: 16px; width: 16px;
-    left: 3px; bottom: 3px;
-    background-color: white;
-    transition: .4s;
-    border-radius: 50%;
-}
-
-input:checked + .slider { background-color: #2196F3; }
-input:checked + .slider:before { transform: translateX(22px); }
-
-/* 行のステータスカラー */
-.cal-week-row.status-decided { border-left: 5px solid #4CAF50; background-color: #f1f8e9; } /* 緑 */
-.cal-week-row.status-active { border-left: 5px solid #2196F3; } /* 青 */
-.cal-week-row.status-skipped { border-left: 5px solid #bdbdbd; background-color: #fafafa; opacity: 0.7; } /* 灰 */
-
-/* ★新規追加: 確定したスキップ */
-/* 薄すぎず、確定したことがわかるような濃いグレーやストライプなど */
-.cal-week-row.status-skipped-fixed { 
-    border-left: 5px solid #616161; 
-    background-color: #eeeeee; 
-    /* 確定済みなので斜線を入れる等の演出も有効 */
-    background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px);
+  .app-header, .view-switcher, .month-nav button, .generator-controls, .add-btn-mini, .btn, #view-config, #modal { display: none !important; }
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  html, body, .main-viewport, .view-section, .container { height: auto !important; overflow: visible !important; width: 100% !important; margin: 0 !important; }
+  .calendar-controls-bar { box-shadow: none; border: none; padding: 0; margin-bottom: 10px; justify-content: center; }
+  .cal-week-row { page-break-inside: avoid; }
+  @page { size: landscape; margin: 10mm; }
+  body { zoom: 0.85; }
 }
