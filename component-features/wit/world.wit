@@ -161,6 +161,11 @@ interface shift-manager {
         // year
         // month
         get-skip-flags: func() -> list<bool>;
+
+        // 現在のポインターが指す月から先のシフトを消す
+        // year
+        // month
+        reset-from-this-month: func();
     }
 
 }

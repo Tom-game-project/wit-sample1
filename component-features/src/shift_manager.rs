@@ -568,6 +568,19 @@ impl GuestShiftManager for AppState {
 
         ret_data
     }
+
+    fn reset_from_this_month(&self) {
+        if let Some (a) = calculate_weeks_delta_from_base(
+            self.get_year() as i32,
+            self.get_month(),
+            1
+        ) {
+            self
+                .schedule_data
+                .borrow_mut()
+                .truncate_from(a);
+        }
+    }
 }
 
 fn staff_into_staff_pill_out (staff: &Staff) -> StaffPillOut {

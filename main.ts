@@ -222,8 +222,8 @@ function closeModal() {
 // --- Global State ---
 // API仕様に合わせる: True = Skip (休み), False = Active (稼働)
 
+// --- Global State ---
 type skip_states = "fixed_skipped" | "fixed_active" | "pending_active"| "pending_skipped";
-
 let pendingSkipFlags2: skip_states[] = [];
 
 function renderCalendar(manager: shiftManager.ShiftManager) {
@@ -239,49 +239,44 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
     mount.innerHTML = '';
 
     const weeksData = calculateCalendarDates(manager.getYear(), manager.getMonth());
+    
+    // 2. Managerから最新情報を取得
+    const savedSkipFlags = manager.getSkipFlags(); 
+    const shiftList = manager.getMonthlyShift(); 
 
-    // 2. Managerから常に最新情報を取得
-    const savedSkipFlags = manager.getSkipFlags();
-    const shiftList = manager.getMonthlyShift();
-
-    console.log(
-            "savedSkipFlags", savedSkipFlags,
-            "year", manager.getYear(),
-            "month", manager.getMonth());
-
-    // ★修正ポイント: 配列の初期化（同期）ロジック
-    // pendingSkipFlags2 が空、または長さが不一致（月移動直後）の場合に初期化
+    // --- 配列初期化 (同期) ロジック ---
     if (pendingSkipFlags2.length !== weeksData.length) {
-        pendingSkipFlags2 = []; // リセット
+        pendingSkipFlags2 = [];
+
+        // この月自体の設定が保存されているか
+        const isCurrentConfigSaved = savedSkipFlags.length === weeksData.length;
 
         weeksData.forEach((week, i) => {
-            // A. この週の設定が保存されているか？ (undefined でなければ保存済み)
-            const savedFlag = savedSkipFlags[i];
-
-            // B. シフトデータが存在するか？
+            // その週に既にシフトが割り当てられているか？
             const hasShiftData = shiftList[i] !== undefined;
 
-            // C. 前月からの溢れ（Overlap）か？ (週の初日が今月でない)
-            const isOverlap = week.days[0].getMonth() !== manager.getMonth();
-
-            if (savedFlag !== undefined) {
-                // 保存設定がある場合 (生成済み) -> 設定に従う
-                pendingSkipFlags2.push(savedFlag ? 'fixed_skipped' : 'fixed_active');
-            } else if (hasShiftData) {
-                // 設定はないがデータがある (前月生成分の溢れ: Active) -> FIXED ACTIVE
-                pendingSkipFlags2.push('fixed_active');
-            } else if (isOverlap) {
-                // 設定もなくデータもないが、前月分の週である -> FIXED SKIP
-                // (前月生成時にスキップされた、あるいは前月未生成だが今月からは操作できないためSkip扱い)
-                pendingSkipFlags2.push('fixed_skipped');
+            if (isCurrentConfigSaved) {
+                // A. 生成済みの場合 (savedSkipFlags を正とする)
+                if (savedSkipFlags[i]) {
+                    pendingSkipFlags2.push('fixed_skipped');
+                } else {
+                    pendingSkipFlags2.push('fixed_active');
+                }
             } else {
-                // それ以外 -> 今月の未生成分 (READY)
-                pendingSkipFlags2.push('pending_active');
+                // B. まだ生成していない場合 (編集中)
+                if (hasShiftData) {
+                    // まだ今月の生成はしていないが、前月の余波でシフトが入っている -> FIXED
+                    pendingSkipFlags2.push('fixed_active');
+                } else {
+                    // ★バグ修正:
+                    // データも設定もない場合は、月またぎ(Overlap)であっても
+                    // 編集可能な 'pending_active' (READY) にする。
+                    // これにより最初の月が FIXED SKIP になるのを防ぐ。
+                    pendingSkipFlags2.push('pending_active');
+                }
             }
         });
     }
-
-    console.log('pendingSkipFlags', pendingSkipFlags2, weeksData);
 
     const fragment = document.createDocumentFragment();
 
@@ -293,7 +288,8 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
         let rowClass = "";
         let statusLabel = "";
         let labelColorClass = "";
-
+        
+        // フラグによるスタイル分岐
         if (skipState == 'fixed_skipped') {
             rowClass = "status-skipped-fixed";
             statusLabel = "FIXED SKIP";
@@ -321,15 +317,22 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
 
         const switchLabel = document.createElement('label');
         switchLabel.className = 'switch';
-
+        
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
 
-        // checkbox.checked = !isUiSkipped;
+        // チェック状態: SkipならTrue
         if (skipState == 'fixed_skipped' || skipState == 'pending_skipped') {
             checkbox.checked = true;
         } else {
             checkbox.checked = false;
+        }
+
+        // ★要件対応: FIXEDな状態のものは変更不可にする
+        if (skipState === 'fixed_skipped' || skipState === 'fixed_active') {
+            checkbox.disabled = true;
+            switchLabel.style.opacity = '0.6'; // 視覚的にも無効感を出す
+            switchLabel.title = "確定済みのシフトです。変更するにはリセットしてください。";
         }
 
         checkbox.addEventListener('change', (e) => {
@@ -339,7 +342,7 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
             } else {
                 pendingSkipFlags2[index] = 'pending_active';
             }
-            renderCalendar(manager);
+            renderCalendar(manager); 
         });
 
         const slider = document.createElement('span');
@@ -355,7 +358,7 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
         statusText.style.marginTop = "4px";
         statusText.style.fontWeight = "bold";
         statusText.textContent = statusLabel;
-
+        
         controlCell.appendChild(statusText);
         row.appendChild(controlCell);
 
@@ -363,16 +366,14 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
         week.days.forEach((day, dayIndex) => {
             const dayCell = document.createElement('div');
             dayCell.className = 'cal-cell-day';
-
+            
             const numSpan = document.createElement('span');
             numSpan.className = 'date-num';
             numSpan.textContent = day.getDate().toString();
             if (day.getMonth() !== manager.getMonth()) dayCell.style.opacity = '0.3';
             dayCell.appendChild(numSpan);
 
-            // ★修正箇所: シフト描画条件を緩和
-            // 「データが存在し」かつ「UIでスキップしていない」ならば表示する
-            // これにより FIXED / READY に関わらずデータがあれば表示されます
+            // シフトデータがあれば表示
             if (weekShiftData) {
                 const dailyShift = getDailyShiftByIndex(weekShiftData, dayIndex);
                 if (dailyShift) renderDailyShift(dayCell, dailyShift);
@@ -653,6 +654,40 @@ function initApp(manager: shiftManager.ShiftManager) {
         pendingSkipFlags2 = [];
         renderCalendar(manager);
     };
+
+    // ★新規追加: Reset Button Implementation
+    document.getElementById('reset-btn')!.onclick = () => {
+        const year = manager.getYear();
+        const month = manager.getMonth(); // 0-11
+        
+        if (!confirm(`${year}年${month + 1}月以降のシフトを全てリセットしますか？\n(この操作は取り消せません)`)) {
+            return;
+        }
+
+        try {
+            // Wasm側に実装した truncate (指定月以降削除) を呼び出す
+            // ※ truncateFrom の引数がどう定義されているかに合わせてください
+            // ここでは絶対週番号などを意識せず、現在の year/month 以降を消すAPIがあると仮定
+            
+            // もしWasm側に `truncate_from_current_month()` のようなAPIがある場合:
+            // manager.truncateScheduleFromCurrentMonth();
+            
+            // あるいは Rust側で定義した `truncate_from(abs_week)` を呼ぶためのラッパーが必要です。
+            // 簡易的に「この月の設定を空で上書きする」だけでは不十分（未来も消す必要があるため）。
+            // ここでは `resetFrom` というAPIをWasmに追加したと仮定します。
+            manager.resetFromThisMonth();
+
+            // 成功したらローカル状態をクリアして再描画
+            // -> savedSkipFlags が空になるため、自動的に READY (青) に戻る
+            pendingSkipFlags2 = [];
+            renderCalendar(manager);
+            
+        } catch (e) {
+            console.error("Reset failed:", e);
+            alert("リセットに失敗しました");
+        }
+    }
+
 
     // Config Controls
     document.getElementById('add-group-btn')!.onclick = () => addNewGroup(manager);
