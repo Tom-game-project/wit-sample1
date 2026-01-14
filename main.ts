@@ -222,7 +222,7 @@ function closeModal() {
 // --- Global State ---
 // API仕様に合わせる: True = Skip (休み), False = Active (稼働)
 
-type skip_states = "fixed_skiped" | "fixed_active" | "pending_active"| "pending_skiped";
+type skip_states = "fixed_skipped" | "fixed_active" | "pending_active"| "pending_skipped";
 
 let pendingSkipFlags2: skip_states[] = [];
 
@@ -249,22 +249,36 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
             "year", manager.getYear(),
             "month", manager.getMonth());
 
-    if (savedSkipFlags.length != 0) {
-        pendingSkipFlags2 = [];
-        console.log("==================");
-        for (let skip_flag of savedSkipFlags) {
-            if (skip_flag) {
-                pendingSkipFlags2.push('fixed_skiped');
-            } else {
+    // ★修正ポイント: 配列の初期化（同期）ロジック
+    // pendingSkipFlags2 が空、または長さが不一致（月移動直後）の場合に初期化
+    if (pendingSkipFlags2.length !== weeksData.length) {
+        pendingSkipFlags2 = []; // リセット
+
+        weeksData.forEach((week, i) => {
+            // A. この週の設定が保存されているか？ (undefined でなければ保存済み)
+            const savedFlag = savedSkipFlags[i];
+
+            // B. シフトデータが存在するか？
+            const hasShiftData = shiftList[i] !== undefined;
+
+            // C. 前月からの溢れ（Overlap）か？ (週の初日が今月でない)
+            const isOverlap = week.days[0].getMonth() !== manager.getMonth();
+
+            if (savedFlag !== undefined) {
+                // 保存設定がある場合 (生成済み) -> 設定に従う
+                pendingSkipFlags2.push(savedFlag ? 'fixed_skipped' : 'fixed_active');
+            } else if (hasShiftData) {
+                // 設定はないがデータがある (前月生成分の溢れ: Active) -> FIXED ACTIVE
                 pendingSkipFlags2.push('fixed_active');
+            } else if (isOverlap) {
+                // 設定もなくデータもないが、前月分の週である -> FIXED SKIP
+                // (前月生成時にスキップされた、あるいは前月未生成だが今月からは操作できないためSkip扱い)
+                pendingSkipFlags2.push('fixed_skipped');
+            } else {
+                // それ以外 -> 今月の未生成分 (READY)
+                pendingSkipFlags2.push('pending_active');
             }
-        }
-    } else if (pendingSkipFlags2.length == 0/* is empty */) {
-        pendingSkipFlags2 = [];
-        for (let i of weeksData) {
-            pendingSkipFlags2.push('pending_active');
-        }
-    } else {
+        });
     }
 
     console.log('pendingSkipFlags', pendingSkipFlags2, weeksData);
@@ -280,20 +294,20 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
         let statusLabel = "";
         let labelColorClass = "";
 
-        if (skipState == 'fixed_skiped') {
-            rowClass = "fixed-skipped";
+        if (skipState == 'fixed_skipped') {
+            rowClass = "status-skipped-fixed";
             statusLabel = "FIXED SKIP";
             labelColorClass = "text-fixed-skipped";
-        } else if (skipState == 'pending_skiped') {
-             rowClass = "pending-skipped";
+        } else if (skipState == 'pending_skipped') {
+             rowClass = "status-skipped";
              statusLabel = "SKIP";
              labelColorClass = "text-pending-skipped";
         } else if (skipState == 'fixed_active'){
-            rowClass = "fixed-active";
+            rowClass = "status-decided";
             statusLabel = "FIXED";
             labelColorClass = "text-fixed-active";
         } else {
-            rowClass = "pending-active";
+            rowClass = "status-active";
             statusLabel = "READY";
             labelColorClass = "text-pending-active";
         }
@@ -312,7 +326,7 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
         checkbox.type = 'checkbox';
 
         // checkbox.checked = !isUiSkipped;
-        if (skipState == 'fixed_skiped' || skipState == 'pending_skiped') {
+        if (skipState == 'fixed_skipped' || skipState == 'pending_skipped') {
             checkbox.checked = true;
         } else {
             checkbox.checked = false;
@@ -321,7 +335,7 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
         checkbox.addEventListener('change', (e) => {
             const isChecked = (e.target as HTMLInputElement).checked;
             if (isChecked) {
-                pendingSkipFlags2[index] = 'pending_skiped';
+                pendingSkipFlags2[index] = 'pending_skipped';
             } else {
                 pendingSkipFlags2[index] = 'pending_active';
             }
@@ -630,12 +644,13 @@ function initApp(manager: shiftManager.ShiftManager) {
             // 1. UIで設定されたフラグリスト(pendingSkipFlags)をWasmに渡す
             //    WIT定義: apply-month-shift: func(skip-flags: list<bool>)
             manager.applyMonthShift(pendingSkipFlags2
-                .map((i) => i == 'fixed_skiped' || i == 'pending_skiped'));
+                .map((i) => i == 'fixed_skipped' || i == 'pending_skipped'));
         } catch (e) {
             console.error("Failed to generate shift:", e);
             alert("シフト生成に失敗しました");
         }
         // 2. 適用後の状態を再描画 (getMonthlyShiftの結果が変わるはず)
+        pendingSkipFlags2 = [];
         renderCalendar(manager);
     };
 
