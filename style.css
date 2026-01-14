@@ -251,3 +251,12 @@ input:checked + .slider:before { transform: translateX(22px); }
 .cal-week-row.status-decided { border-left: 5px solid #4CAF50; background-color: #f1f8e9; } /* 緑 */
 .cal-week-row.status-active { border-left: 5px solid #2196F3; } /* 青 */
 .cal-week-row.status-skipped { border-left: 5px solid #bdbdbd; background-color: #fafafa; opacity: 0.7; } /* 灰 */
+
+/* ★新規追加: 確定したスキップ */
+/* 薄すぎず、確定したことがわかるような濃いグレーやストライプなど */
+.cal-week-row.status-skipped-fixed { 
+    border-left: 5px solid #616161; 
+    background-color: #eeeeee; 
+    /* 確定済みなので斜線を入れる等の演出も有効 */
+    background-image: repeating-linear-gradient(45deg, transparent, transparent 10px, #e0e0e0 10px, #e0e0e0 20px);
+}

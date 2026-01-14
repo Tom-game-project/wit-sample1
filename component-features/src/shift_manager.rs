@@ -552,8 +552,9 @@ impl GuestShiftManager for AppState {
         } else {
             return Vec::new();
         };
-        log(&format!("skip list:{:?}", self.schedule_data.borrow().get_timeline()));
-        self
+        log(&format!("get skip list: skip list: {:?}", self.schedule_data.borrow().get_timeline()));
+
+        let ret_data = self
             .schedule_data
             .borrow()
             .get_skip_list_by_abs(
@@ -562,7 +563,10 @@ impl GuestShiftManager for AppState {
                     self.get_year() as i32,
                     self.get_month()
                 ) as usize
-            )
+            );
+        log(&format!("get skip list: ret_data: {:?} year {} month {}, gen week abs {}", ret_data, self.get_year(), self.get_month(), gen_week_abs));
+
+        ret_data
     }
 }
 

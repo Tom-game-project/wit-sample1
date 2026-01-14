@@ -57,6 +57,7 @@ RS_SRCS = \
 			component-features/src/lib.rs \
 			component-features/src/shift_manager.rs \
 			component-features/src/shift_gen.rs \
+			component-features/src/shift_calendar_manager.rs\
 
 # ビルド成果物の出力ディレクトリ及びファイル
 

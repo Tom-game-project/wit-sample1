@@ -221,89 +221,111 @@ function closeModal() {
  */
 // --- Global State ---
 // API仕様に合わせる: True = Skip (休み), False = Active (稼働)
-let pendingSkipFlags: boolean[] = []; 
+
+type skip_states = "fixed_skiped" | "fixed_active" | "pending_active"| "pending_skiped";
+
+let pendingSkipFlags2: skip_states[] = [];
 
 function renderCalendar(manager: shiftManager.ShiftManager) {
-    // --- 1. 月ラベルの更新 (最優先で実行) ---
+    // 1. ラベル更新
     const label = document.getElementById('current-month-label');
     if (label) {
-        // manager.getMonth() は 0-11 を返すと仮定
         const date = new Date(manager.getYear(), manager.getMonth(), 1);
-        label.textContent = date.toLocaleDateString('ja-JP', { 
-            year: 'numeric', 
-            month: 'long' 
-        });
+        label.textContent = date.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
     }
 
     const mount = document.getElementById('calendar-mount');
     if (!mount) return;
     mount.innerHTML = '';
 
-    // --- 2. データ準備 ---
     const weeksData = calculateCalendarDates(manager.getYear(), manager.getMonth());
-    
-    // Wasmから「現在の設定(Skipフラグ)」と「確定シフト」を取得
-    const savedSkipFlags = manager.getSkipFlags(); 
-    const shiftList = manager.getMonthlyShift(); 
 
-    // --- 3. フラグ配列の同期 ---
-    // 月が変わった、または初期ロード時
-    if (pendingSkipFlags.length !== weeksData.length) {
-        if (savedSkipFlags.length === weeksData.length) {
-            // 保存された設定があればコピー (True=Skip)
-            pendingSkipFlags = [...savedSkipFlags];
-        } else {
-            // デフォルトは「稼働」なので、Skip = false で埋める
-            pendingSkipFlags = new Array(weeksData.length).fill(false);
+    // 2. Managerから常に最新情報を取得
+    const savedSkipFlags = manager.getSkipFlags();
+    const shiftList = manager.getMonthlyShift();
+
+    console.log(
+            "savedSkipFlags", savedSkipFlags,
+            "year", manager.getYear(),
+            "month", manager.getMonth());
+
+    if (savedSkipFlags.length != 0) {
+        pendingSkipFlags2 = [];
+        console.log("==================");
+        for (let skip_flag of savedSkipFlags) {
+            if (skip_flag) {
+                pendingSkipFlags2.push('fixed_skiped');
+            } else {
+                pendingSkipFlags2.push('fixed_active');
+            }
         }
+    } else if (pendingSkipFlags2.length == 0/* is empty */) {
+        pendingSkipFlags2 = [];
+        for (let i of weeksData) {
+            pendingSkipFlags2.push('pending_active');
+        }
+    } else {
     }
+
+    console.log('pendingSkipFlags', pendingSkipFlags2, weeksData);
 
     const fragment = document.createDocumentFragment();
 
     weeksData.forEach((week, index) => {
-        // API/変数: True = Skip
-        const isSkipped = pendingSkipFlags[index];
-        // UI: True(Checked) = Active
-        const isUiActive = !isSkipped;
-
         const weekShiftData = shiftList[index];
-        // データが存在する(Some)なら決定済み
-        const isDecided = weekShiftData !== undefined;
+        const skipState = pendingSkipFlags2[index];
 
-        // --- 行のスタイル決定 ---
-        const row = document.createElement('div');
-        let statusClass = "status-active"; // 青 (予定)
+        // --- ステータス決定 ---
+        let rowClass = "";
+        let statusLabel = "";
+        let labelColorClass = "";
 
-        if (isDecided) {
-            // 緑 (確定済み)
-            statusClass = "status-decided";
-        } else if (isSkipped) {
-            // 灰 (スキップ中)
-            statusClass = "status-skipped";
+        if (skipState == 'fixed_skiped') {
+            rowClass = "fixed-skipped";
+            statusLabel = "FIXED SKIP";
+            labelColorClass = "text-fixed-skipped";
+        } else if (skipState == 'pending_skiped') {
+             rowClass = "pending-skipped";
+             statusLabel = "SKIP";
+             labelColorClass = "text-pending-skipped";
+        } else if (skipState == 'fixed_active'){
+            rowClass = "fixed-active";
+            statusLabel = "FIXED";
+            labelColorClass = "text-fixed-active";
+        } else {
+            rowClass = "pending-active";
+            statusLabel = "READY";
+            labelColorClass = "text-pending-active";
         }
-        
-        row.className = `cal-week-row ${statusClass}`;
 
-        // --- [左列] コントロール (スイッチ) ---
+        const row = document.createElement('div');
+        row.className = `cal-week-row ${rowClass}`;
+
+        // --- [左列] コントロール ---
         const controlCell = document.createElement('div');
         controlCell.className = 'cal-cell-control';
 
-        // スイッチ要素
         const switchLabel = document.createElement('label');
         switchLabel.className = 'switch';
-        
+
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
-        // UI上は「稼働」ならチェックを入れる
-        checkbox.checked = isUiActive;
+
+        // checkbox.checked = !isUiSkipped;
+        if (skipState == 'fixed_skiped' || skipState == 'pending_skiped') {
+            checkbox.checked = true;
+        } else {
+            checkbox.checked = false;
+        }
 
         checkbox.addEventListener('change', (e) => {
             const isChecked = (e.target as HTMLInputElement).checked;
-            // UI: ON(Active) -> Skip: False
-            // UI: OFF(Inactive) -> Skip: True
-            pendingSkipFlags[index] = !isChecked;
-            
-            renderCalendar(manager); 
+            if (isChecked) {
+                pendingSkipFlags2[index] = 'pending_skiped';
+            } else {
+                pendingSkipFlags2[index] = 'pending_active';
+            }
+            renderCalendar(manager);
         });
 
         const slider = document.createElement('span');
@@ -313,23 +335,13 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
         switchLabel.appendChild(slider);
         controlCell.appendChild(switchLabel);
 
-        // ステータス文字
         const statusText = document.createElement('span');
+        statusText.className = `status-text ${labelColorClass}`;
         statusText.style.fontSize = "10px";
         statusText.style.marginTop = "4px";
         statusText.style.fontWeight = "bold";
-        
-        if (isDecided) {
-            statusText.textContent = "FIXED";
-            statusText.style.color = "#2e7d32"; // Dark Green
-        } else if (isSkipped) {
-            statusText.textContent = "SKIP";
-            statusText.style.color = "#9e9e9e"; // Grey
-        } else {
-            statusText.textContent = "READY";
-            statusText.style.color = "#1565c0"; // Blue
-        }
-        
+        statusText.textContent = statusLabel;
+
         controlCell.appendChild(statusText);
         row.appendChild(controlCell);
 
@@ -337,26 +349,19 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
         week.days.forEach((day, dayIndex) => {
             const dayCell = document.createElement('div');
             dayCell.className = 'cal-cell-day';
-            
+
             const numSpan = document.createElement('span');
             numSpan.className = 'date-num';
             numSpan.textContent = day.getDate().toString();
-            
-            // 他月の日付は薄く
-            if (day.getMonth() !== manager.getMonth()) {
-                dayCell.style.opacity = '0.3';
-            }
-            
+            if (day.getMonth() !== manager.getMonth()) dayCell.style.opacity = '0.3';
             dayCell.appendChild(numSpan);
 
-            // シフトデータがあれば描画
-            // (スキップされていても、古いデータが残っている場合などは表示しないように isDecided チェックを入れるか、
-            //  あるいは isSkipped でもデータがあれば表示するかは仕様次第。ここではDecidedなら表示)
-            if (isDecided && weekShiftData) {
+            // ★修正箇所: シフト描画条件を緩和
+            // 「データが存在し」かつ「UIでスキップしていない」ならば表示する
+            // これにより FIXED / READY に関わらずデータがあれば表示されます
+            if (weekShiftData) {
                 const dailyShift = getDailyShiftByIndex(weekShiftData, dayIndex);
-                if (dailyShift) {
-                    renderDailyShift(dayCell, dailyShift);
-                }
+                if (dailyShift) renderDailyShift(dayCell, dailyShift);
             }
 
             row.appendChild(dayCell);
@@ -607,24 +612,25 @@ function initApp(manager: shiftManager.ShiftManager) {
     document.getElementById('prev-btn')!.onclick = () => {
         manager.changePrevMonth();
         // 月が変わったらフラグもリセット
-        pendingSkipFlags = [];
+        pendingSkipFlags2 = [];
         renderCalendar(manager);
     };
 
     document.getElementById('next-btn')!.onclick = () => {
         manager.changeNextMonth();
-        pendingSkipFlags = [];
+        pendingSkipFlags2 = [];
         renderCalendar(manager);
     };
 
     // ★ Generate Button Implementation
     document.getElementById('generate-btn')!.onclick = () => {
-        console.log("Applying Rules:", pendingSkipFlags);
+        console.log("Applying Rules:", pendingSkipFlags2);
 
         try {
             // 1. UIで設定されたフラグリスト(pendingSkipFlags)をWasmに渡す
             //    WIT定義: apply-month-shift: func(skip-flags: list<bool>)
-            manager.applyMonthShift(pendingSkipFlags);
+            manager.applyMonthShift(pendingSkipFlags2
+                .map((i) => i == 'fixed_skiped' || i == 'pending_skiped'));
         } catch (e) {
             console.error("Failed to generate shift:", e);
             alert("シフト生成に失敗しました");
@@ -648,7 +654,6 @@ function initApp(manager: shiftManager.ShiftManager) {
     // Initial Render
     renderCalendar(manager);
 }
-
 
 $init.then(() => {
     let state = new shiftManager.ShiftManager();

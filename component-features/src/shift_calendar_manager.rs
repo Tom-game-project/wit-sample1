@@ -290,19 +290,23 @@ impl ShiftCalendarManager {
         abs_week: AbsWeek, 
         range: usize
     ) -> Vec<bool> {
-        if abs_week < self.timeline.len() {
-            if abs_week + range < self.timeline.len() {
-                self
-                    .timeline[abs_week..abs_week + range]
-                    .iter()
-                    .map(|a| matches!(a, WeekStatus::Skipped))
-                    .collect()
+        if let Ok(index) = self.abs_to_index(abs_week) {
+            if index < self.timeline.len() {
+                if index + range < self.timeline.len() {
+                    self
+                        .timeline[index..index + range]
+                        .iter()
+                        .map(|a| matches!(a, WeekStatus::Skipped))
+                        .collect()
+                } else {
+                    self
+                        .timeline[index..]
+                        .iter()
+                        .map(|a| matches!(a, WeekStatus::Skipped))
+                        .collect()
+                }
             } else {
-                self
-                    .timeline[abs_week..]
-                    .iter()
-                    .map(|a| matches!(a, WeekStatus::Skipped))
-                    .collect()
+                Vec::new()
             }
         } else {
             Vec::new()
