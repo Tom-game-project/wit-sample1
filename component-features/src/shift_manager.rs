@@ -34,11 +34,10 @@ use std::{
 };
 
 use crate::{
-    shift_calendar_manager::{
+    load_rules::{JsonAssignment, JsonConfig, JsonDailySchedule, JsonRule, JsonStaffGroup, JsonWeeklySchedule}, shift_calendar_manager::{
         AbsWeek, 
         ShiftCalendarManager
-    },
-    shift_manager::exports::component::component_features::shift_manager::{
+    }, shift_manager::exports::component::component_features::shift_manager::{
         DailyShiftOut, 
         StaffPillOut
     }
@@ -61,6 +60,21 @@ use chrono::{NaiveDate, Duration, Datelike};
 // struct StaffInfo(String);
 
 impl StaffGroup {
+    fn from_json(json_group: JsonStaffGroup) -> Self {
+        Self { 
+            name: json_group.name, 
+            slots: json_group
+                .slots
+                .iter()
+                .map(|i|
+                    StaffInfo {
+                        name: i.name.clone()
+                    }
+                )
+                .collect()
+        }
+    }
+
     fn add_slot(&mut self) {
         self.slots.push(StaffInfo{name: String::from("")});
     }
@@ -107,6 +121,18 @@ impl WeekSchedule {
                 fri: DayShiftIds::new(), 
                 sat: DayShiftIds::new(), 
                 sun: DayShiftIds::new(), 
+        }
+    }
+
+    fn from_json(json_weekly: &JsonWeeklySchedule) -> Self {
+        Self { 
+            mon: DayShiftIds::from_json(&json_weekly.mon),
+            tue: DayShiftIds::from_json(&json_weekly.tue),
+            wed: DayShiftIds::from_json(&json_weekly.wed),
+            thu: DayShiftIds::from_json(&json_weekly.thu),
+            fri: DayShiftIds::from_json(&json_weekly.fri),
+            sat: DayShiftIds::from_json(&json_weekly.sat),
+            sun: DayShiftIds::from_json(&json_weekly.sun),
         }
     }
 
@@ -163,6 +189,7 @@ impl WeekSchedule {
             } 
         }
     }
+
 }
 
 impl ShiftWeekday {
@@ -199,6 +226,13 @@ impl WeeklyRule {
         }
     }
 
+    fn from_json(json_rule: &JsonRule) -> Self {
+        Self { 
+            name: json_rule.name.to_string(),
+            schedule: WeekSchedule::from_json(&json_rule.schedule)
+        }
+    }
+
     fn change_name(&mut self, name: String) {
         self.name = name;
     }
@@ -213,6 +247,13 @@ impl WeeklyRule {
 impl DayShiftIds {
     fn new() -> Self {
         Self { m: vec![], a: vec![] }
+    }
+
+    fn from_json(json_daily: &JsonDailySchedule) -> Self {
+        Self {
+            m: json_daily.m.iter().map(|i| Holl::from_json(i)).collect(),
+            a: json_daily.a.iter().map(|i| Holl::from_json(i)).collect()
+        }
     }
 
     /// shift_calendarが処理できる型に変換する
@@ -237,6 +278,13 @@ impl Holl {
             self.shift_staff_index as usize
         )
     }
+
+    fn from_json(json_assignment: &JsonAssignment) -> Self {
+        Self {
+            staff_group_id: json_assignment.staff_group_id,
+            shift_staff_index: json_assignment.shift_staff_index
+        }
+    } 
 }
 
 // --------------------------------------------------------
@@ -260,16 +308,29 @@ struct AppState {
 
 impl GuestShiftManager for AppState {
     fn new() -> Self {
+        let year = 2026;
+        let month = 1; // 2月
+        let gen_week_abs = if let Some (a) = calculate_weeks_delta_from_base(
+            year as i32,
+            month,
+            1
+        ) { 
+            a
+        } else {
+            // TODO unsafe
+            panic!()
+        };
+
+        log(&format!("new:gen week abs {}", gen_week_abs));
+
         Self {
             staff_groups: RefCell::new(vec![]),
             rules: RefCell::new(vec![]),
-            year: RefCell::new(2026), // TODO 初期値はdeps内の関数から取得する必要あり
-            month: RefCell::new(1),   // TODO  初期値はdeps内の関数から取得する必要あり
+            year: RefCell::new(year), // TODO 初期値はdeps内の関数から取得する必要あり
+            month: RefCell::new(month),   // TODO  初期値はdeps内の関数から取得する必要あり
             schedule_data: RefCell::new(
                 ShiftCalendarManager::new(
-                    // TODO
-                    // TODO
-                    2926, //base_abs_week,
+                    gen_week_abs, //base_abs_week, 
                     25 // initial_delta
                 )
             )
@@ -411,7 +472,8 @@ impl GuestShiftManager for AppState {
                     .schedule
                     .get_week_rule_assignment(
                         day, 
-                        shift_time,)
+                        shift_time,
+                    )
             )
         } else {
             None
@@ -557,7 +619,6 @@ impl GuestShiftManager for AppState {
                     self.get_month()
                 ) as usize
             );
-        // log(&format!("get skip list: ret_data: {:?} year {} month {}, gen week abs {}", ret_data, self.get_year(), self.get_month(), gen_week_abs));
 
         ret_data
     }
@@ -573,6 +634,47 @@ impl GuestShiftManager for AppState {
                 .borrow_mut()
                 .truncate_from(a);
         }
+    }
+
+    /// この関数では、与えられたjson文字列をパースし、app_stateにセットする
+    fn load_config_from_json(&self, json_str: String) -> Result<(), String> {
+        // 1. JSON文字列を Rustの構造体にパース
+        let config: JsonConfig = serde_json::from_str(&json_str)
+            .map_err(|e| format!("JSON parse error: {}", e))?;
+
+        // 2. 内部状態をクリア (必要に応じて)
+
+        let mut groups_guard = self.staff_groups.borrow_mut();
+        let mut rules_guard = self.rules.borrow_mut();
+
+        groups_guard.clear();
+        rules_guard.clear();
+
+        // 3. データを内部構造に移し替える
+        // (JsonConfigの構造と内部構造が完全に一致しているならそのまま代入でOKですが、
+        //  型が違う場合はここで変換します)
+
+        // --- Staff Groups のロード ---
+        for json_group in config.staff_groups {
+            // 内部用のStaffGroup型に変換して追加
+            groups_guard.push(
+                StaffGroup::from_json(json_group)
+            );
+        }
+
+        // --- Rules のロード ---
+        for json_rule in config.rules {
+            // 内部用のRule型に変換して追加
+            rules_guard.push(
+                WeeklyRule::from_json(&json_rule)
+            );
+        }
+
+        Ok(())
+    }
+
+    fn output_calendar_manager_data(&self,) -> Result<String, String> {
+        self.schedule_data.borrow().output_inner_data()
     }
 }
 

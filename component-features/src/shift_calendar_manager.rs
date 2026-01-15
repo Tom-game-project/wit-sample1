@@ -10,10 +10,11 @@ use shift_calendar::{
     }
 };
 
-use crate::shift_gen::dummy::logger::logger::log;
+// use crate::shift_gen::dummy::logger::logger::log;
 
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug)]
+#[derive(Debug, Deserialize, Serialize)]
 pub enum WeekStatus {
     Active { 
         logical_delta: LogicalDelta,
@@ -27,6 +28,8 @@ pub type AbsWeek = usize;
 pub type LogicalDelta = usize;
 
 /// 確定した予定を入れます
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ShiftCalendarManager {
     base_abs_week: AbsWeek,
     initial_delta: LogicalDelta,
@@ -54,43 +57,16 @@ impl ShiftCalendarManager {
         Self { base_abs_week, initial_delta, timeline: Vec::new() }
     }
 
-    fn delta_to_abs(
-        &self,
-        delta: LogicalDelta
-    ) -> AbsWeek {
-        let abs_week = delta + (self.base_abs_week - self.initial_delta);
-
-        abs_week
-    }
-
-    fn abs_to_delta(
-        &self,
-        abs_week: AbsWeek
-    ) -> Result<LogicalDelta, AppendWeekErrorKind> {
-        if abs_week < (self.base_abs_week - self.initial_delta) {
-            Err(AppendWeekErrorKind::UnderFlow)
-        } else {
-            Ok(abs_week - (self.base_abs_week - self.initial_delta))
-        }
-    }
-
-    fn delta_to_index(
-        &self,
-        delta: LogicalDelta
-    ) -> Result<usize, AppendWeekErrorKind> {
-        if delta < self.initial_delta {
-            Err(AppendWeekErrorKind::UnderFlow) // out of index
-        }else{
-            Ok(delta - self.initial_delta)
-        }
-    }
-
     fn abs_to_index(
         &self, 
         abs_week: AbsWeek
     ) -> Result<usize, AppendWeekErrorKind> {
         // self.delta_to_index(self.abs_to_delta(abs_week)?)
-        Ok(abs_week - self.base_abs_week)
+        if abs_week < self.base_abs_week {
+            Err(AppendWeekErrorKind::UnderFlow)
+        } else {
+            Ok(abs_week - self.base_abs_week)
+        }
     }
 
     /// すでに作成したリストのなかにtarget_abs_weekを含み
@@ -141,7 +117,6 @@ impl ShiftCalendarManager {
         skip_flags: &[bool]
     ) -> Result<(), AppendWeekErrorKind> {
         if self.timeline.len() + self.base_abs_week < target_abs_week {
-            log(&format!("timeline len {} abs_to_delta {}", self.timeline.len(), self.abs_to_delta(target_abs_week)?));
             return Err(AppendWeekErrorKind::NotConsecutiveShifts);
         }
 
@@ -156,7 +131,6 @@ impl ShiftCalendarManager {
         {
             // Ok
         } else {
-            log(&format!("timeline len {} abs_to_delta {} abs index {}", self.timeline.len(), self.abs_to_delta(target_abs_week)?, self.abs_to_index(target_abs_week)?));
             return Err(AppendWeekErrorKind::AttemptedToOverwrite);
         }
         Ok(())
@@ -181,10 +155,21 @@ impl ShiftCalendarManager {
         //  let append_len = after_timeline_len (6) - self.timeline.len() (3); (3)
         //  let append_start_index = skip_flags.len() (4) - append_len (3); (1)     // append start index
         //  let append_skip_flags = [append_start_index..]
+        //  [T, T, T, T]
+        //  [T, T]      
+        //              []
+        //
         if self.timeline.len() < self.abs_to_index(target_abs_week)? {
             return Err(AppendWeekErrorKind::UnderFlow);
         }
+
         let append_start_index = self.timeline.len() - self.abs_to_index(target_abs_week)?;
+
+        // 重要: indexを超えている場合
+        // 何もしない
+        if skip_flags.len() <= append_start_index {
+            return Ok(());
+        }
 
         for is_skipped in &skip_flags[append_start_index..] {
             self.append_week(*is_skipped);
@@ -323,7 +308,22 @@ impl ShiftCalendarManager {
     pub fn get_timeline(&self) -> &Vec<WeekStatus> {
         &self.timeline
     }
+
+    /// json化した内部状態を返却します
+    pub fn output_inner_data(&self) -> Result<String, String>{
+        match serde_json::to_string(&self) {
+            Ok(v) => {
+                Ok(v)
+            }
+            Err(_e) => {
+                Err(String::from("FailedToStringify"))
+            }
+        }
+    }
 }
+
+
+
 
 // ==================================== test ==================================== 
 #[cfg(test)]

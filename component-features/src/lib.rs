@@ -9,3 +9,4 @@ pub mod async_example;
 
 pub mod shift_calendar_manager;
 
+mod load_rules;

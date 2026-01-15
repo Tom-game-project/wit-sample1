@@ -166,8 +166,12 @@ interface shift-manager {
         // year
         // month
         reset-from-this-month: func();
-    }
 
+        // jsonの設定を読んでルールをセットする関数
+        load-config-from-json: func(json-setting: string) -> result<_, string>;
+
+        output-calendar-manager-data: func() -> result<string, string>;
+    }
 }
 
 world shift-manager-world {

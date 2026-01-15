@@ -1,0 +1,68 @@
+{
+  "staffGroups": [
+    {
+      "name": "Group0",
+      "slots": [
+        {
+          "name": "a"
+        },
+        {
+          "name": "b"
+        },
+        {
+          "name": "c"
+        }
+      ]
+    }
+  ],
+  "rules": [
+    {
+      "name": "",
+      "schedule": {
+        "mon": {
+          "m": [
+            {
+              "staffGroupId": 0,
+              "shiftStaffIndex": 0
+            }
+          ],
+          "a": []
+        },
+        "tue": {
+          "m": [],
+          "a": [
+            {
+              "staffGroupId": 0,
+              "shiftStaffIndex": 1
+            }
+          ]
+        },
+        "wed": {
+          "m": [
+            {
+              "staffGroupId": 0,
+              "shiftStaffIndex": 2
+            }
+          ],
+          "a": []
+        },
+        "thu": {
+          "m": [],
+          "a": []
+        },
+        "fri": {
+          "m": [],
+          "a": []
+        },
+        "sat": {
+          "m": [],
+          "a": []
+        },
+        "sun": {
+          "m": [],
+          "a": []
+        }
+      }
+    }
+  ]
+}

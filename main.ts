@@ -237,40 +237,6 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
     const shiftList = manager.getMonthlyShift(); 
 
     // --- 配列初期化 (同期) ロジック ---
-    // if (pendingSkipFlags2.length !== weeksData.length) {
-    //     pendingSkipFlags2 = [];
-    // 
-    //     // この月自体の設定が保存されているか
-    //     const isCurrentConfigSaved = savedSkipFlags.length === weeksData.length;
-    // 
-    //     weeksData.forEach((week, i) => {
-    //         // その週に既にシフトが割り当てられているか？
-    //         const hasShiftData = shiftList[i] !== undefined;
-    // 
-    //         if (isCurrentConfigSaved) {
-    //             // A. 生成済みの場合 (savedSkipFlags を正とする)
-    //             if (savedSkipFlags[i]) {
-    //                 pendingSkipFlags2.push('fixed_skipped');
-    //             } else {
-    //                 pendingSkipFlags2.push('fixed_active');
-    //             }
-    //         } else {
-    //             // B. まだ生成していない場合 (編集中)
-    //             if (hasShiftData) {
-    //                 // まだ今月の生成はしていないが、前月の余波でシフトが入っている -> FIXED
-    //                 pendingSkipFlags2.push('fixed_active');
-    //             } else {
-    //                 // ★バグ修正:
-    //                 // データも設定もない場合は、月またぎ(Overlap)であっても
-    //                 // 編集可能な 'pending_active' (READY) にする。
-    //                 // これにより最初の月が FIXED SKIP になるのを防ぐ。
-    //                 pendingSkipFlags2.push('pending_active');
-    //             }
-    //         }
-    //     });
-    // }
-
-// --- 配列初期化 (同期) ロジック ---
     if (pendingSkipFlags2.length !== weeksData.length) {
         pendingSkipFlags2 = [];
 
@@ -718,6 +684,73 @@ function initApp(manager: shiftManager.ShiftManager) {
         }
     }
 
+// --- JSON Load/Save Controls ---
+
+    const fileInput = document.getElementById('config-file-input') as HTMLInputElement;
+    const importBtn = document.getElementById('import-json-btn');
+    const downloadBtn = document.getElementById('download-json-btn');
+
+    // 1. Loadボタンが押されたら、隠しinputをクリックさせる
+    if (importBtn) {
+        importBtn.onclick = () => {
+            fileInput.click();
+        };
+    }
+
+    // 2. ファイルが選択された時の処理
+    if (fileInput) {
+        fileInput.onchange = async (e) => {
+            const target = e.target as HTMLInputElement;
+            const file = target.files?.[0];
+
+            if (!file) return;
+
+            try {
+                // ファイルの中身をテキストとして読み取る
+                const jsonText = await file.text();
+
+                // WASMのメソッドを呼び出してロード
+                // WIT定義: load-config-from-json: func(json-setting: string) -> result<_, string>;
+                // jcoのバインディングでは、ResultのErrは例外としてスローされます
+                manager.loadConfigFromJson(jsonText);
+
+                // 成功したらUIを更新
+                renderConfig(manager);
+                alert(`設定ファイルを読み込みました: ${file.name}`);
+
+            } catch (err: any) {
+                console.error("Config Load Error:", err);
+                // Rust側から返されたエラーメッセージを表示
+                alert(`設定の読み込みに失敗しました:\n${err}`);
+            } finally {
+                // 同じファイルを再度選択できるように値をリセット
+                fileInput.value = '';
+            }
+        };
+    }
+
+    // 3. Save (Download) ボタンの処理
+    if (downloadBtn) {
+        downloadBtn.onclick = () => {
+            // 現在の設定を取得
+            const dataStr = JSON.stringify({
+                staffGroups: manager.getStaffGroups(),
+                rules: manager.getRules()
+            }, null, 2);
+
+            // Blobを作成してダウンロードリンクを生成
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `shift_config_${new Date().toISOString().slice(0, 10)}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+    }
+
     // Config Controls
     document.getElementById('add-group-btn')!.onclick = () => addNewGroup(manager);
     document.getElementById('add-rule-btn')!.onclick = () => addNewRule(manager);
@@ -739,7 +772,9 @@ $init.then(() => {
 
     initApp(manager);
 
-    // asyncExampleFunc()
-    //     .then((rstr) => {console.log(rstr)});
+    document.getElementById('test-button')!.onclick = (e) => {
+            let a = manager.outputCalendarManagerData();
+            console.log("get time line", a);
+    };
 })
 

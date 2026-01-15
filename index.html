@@ -31,6 +31,8 @@
                         </select>
                     <button id="generate-btn" class="btn btn-primary btn-sm">Generate</button>
                     <button id="reset-btn" class="btn btn-danger btn-sm" style="margin-left: 10px; background-color: #dc3545; color: white; border: none;">Reset Future</button>
+
+                    <button id="test-button">test-button</button>
                 </div>
             </div>
             <div id="calendar-mount" class="calendar-list"></div>
@@ -56,6 +58,18 @@
             </div>
             <div class="section-box">
                 <h2>3. JSON Output</h2>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2>3. Data Import / Export</h2>
+                    <div>
+                        <input type="file" id="config-file-input" accept=".json" style="display: none;">
+
+                        <button id="import-json-btn" class="btn btn-primary">📂 Load JSON</button>
+                        <button id="download-json-btn" class="btn btn-outline" style="margin-left: 10px;">💾 Save JSON</button>
+                    </div>
+                </div>
+                <p style="font-size:0.85em; color:#666; margin-top:5px;">
+                    現在の設定テキスト (コピー用):
+                </p>
                 <pre id="json-output"></pre>
             </div>
         </div>
@@ -70,7 +84,7 @@
     </div>
 </div>
 
-<button id="test-button"></button>
+
 <script src="main.ts" inline></script>
 </body>
 </html>
