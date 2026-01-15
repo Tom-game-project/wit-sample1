@@ -507,7 +507,7 @@ impl GuestShiftManager for AppState {
         }
     }
 
-    fn get_rules(&self) -> Vec<WeeklyRule> {
+    fn get_weekly_rules(&self) -> Vec<WeeklyRule> {
         self.rules.borrow().clone()
     }
 
@@ -528,7 +528,7 @@ impl GuestShiftManager for AppState {
             shift_calendar::shift_gen::WeekRuleTable::new();
         let mut staff_group_list = 
             shift_calendar::shift_gen::StaffGroupList::new();
-        for i in self.get_rules() {
+        for i in self.get_weekly_rules() {
             week_rule_table.add_week_rule(WeekRule([
                 i.schedule.mon.day_shift_ids_into_day_rule(),
                 i.schedule.tue.day_shift_ids_into_day_rule(),

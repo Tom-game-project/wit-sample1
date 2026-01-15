@@ -138,7 +138,7 @@ interface shift-manager {
         change-next-month: func();
 
         // AppStateの`rules`を取得
-        get-rules: func() -> list<weekly-rule>;
+        get-weekly-rules: func() -> list<weekly-rule>;
 
         // AppStateの`staff-group`を取得
         get-staff-groups: func() -> list<staff-group>;

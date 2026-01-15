@@ -31,10 +31,10 @@ pub type LogicalDelta = usize;
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ShiftCalendarManager {
-    base_abs_week: AbsWeek,
-    initial_delta: LogicalDelta,
+    pub base_abs_week: AbsWeek,
+    pub initial_delta: LogicalDelta,
 
-    timeline: Vec<WeekStatus>, // 実週番号 -> 状態
+    pub timeline: Vec<WeekStatus>, // 実週番号 -> 状態
 }
 
 #[derive(Debug)]

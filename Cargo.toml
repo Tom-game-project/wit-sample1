@@ -1,5 +1,5 @@
 [workspace]
 resolver = "3"
-members = ["component-features", "work_shift_dayoff_logic"]
+members = ["component-features", "shift_tools", "work_shift_dayoff_logic"]
 
 

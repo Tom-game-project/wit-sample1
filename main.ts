@@ -7,7 +7,6 @@
 import {
     $init,
     shiftManager,
-    asyncExampleFunc
 } from "./target/jco/component_features.js";
 
 import type {
@@ -85,7 +84,7 @@ function updateRuleSelect(manager: shiftManager.ShiftManager) {
     const select = document.getElementById('rule-select');
     if (!select) return; // エラー回避
     select.innerHTML = '';
-    manager.getRules().forEach((rule, idx) => {
+    manager.getWeeklyRules().forEach((rule, idx) => {
         const option = document.createElement('option');
         option.value = idx.toString();
         option.textContent = rule.name;
@@ -548,7 +547,7 @@ function renderRules(manager: shiftManager.ShiftManager) {
     const container = document.getElementById('rules-container')!;
     container.replaceChildren();
 
-    manager.getRules().forEach((rule, rIdx) => {
+    manager.getWeeklyRules().forEach((rule, rIdx) => {
         const theadTr = el('tr', {}, el('th', { className: 'config-row-header' }, 'Shift'));
         days.forEach((d) => theadTr.appendChild(el('th', {}, d.toUpperCase())));
         
@@ -602,7 +601,7 @@ function renderRules(manager: shiftManager.ShiftManager) {
 }
 
 function renderJSON(manager: shiftManager.ShiftManager) { 
-    document.getElementById('json-output')!.textContent = JSON.stringify({staffGroups: manager.getStaffGroups(), rules: manager.getRules()}, null, 2); 
+    document.getElementById('json-output')!.textContent = JSON.stringify({staffGroups: manager.getStaffGroups(), rules: manager.getWeeklyRules()}, null, 2); 
 }
 
 /* ==========================================================================
@@ -808,7 +807,7 @@ function initApp(manager: shiftManager.ShiftManager) {
             // 現在の設定を取得
             const dataStr = JSON.stringify({
                 staffGroups: manager.getStaffGroups(),
-                rules: manager.getRules()
+                rules: manager.getWeeklyRules()
             }, null, 2);
 
             // Blobを作成してダウンロードリンクを生成
@@ -844,10 +843,5 @@ $init.then(() => {
     let manager = new shiftManager.ShiftManager();
 
     initApp(manager);
-
-    document.getElementById('test-button')!.onclick = (e) => {
-            let a = manager.outputCalendarManagerData();
-            console.log("get time line", a);
-    };
 })
 
