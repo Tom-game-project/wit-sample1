@@ -1,0 +1,9 @@
+package async-mock:async-mock@0.1.0-alpha;
+
+interface async-mock{
+    async-func: func() -> string;
+}
+
+world imports {
+    import async-mock;
+}

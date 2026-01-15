@@ -7,6 +7,7 @@
 import {
     $init,
     shiftManager,
+    asyncExampleFunc
 } from "./target/jco/component_features.js";
 
 import type {
@@ -66,7 +67,7 @@ let modalCtx: ModalContext | null = null;
    ========================================================================== */
 
 /* --- View Switching --- */
-function switchView(state: shiftManager.ShiftManager, viewName:string) {
+function switchView(manager: shiftManager.ShiftManager, viewName:string) {
     document.querySelectorAll<HTMLElement>('.view-btn').forEach(btn => {
         if (btn.innerText.toLowerCase().includes(viewName)) btn.classList.add('active');
         else btn.classList.remove('active');
@@ -75,22 +76,16 @@ function switchView(state: shiftManager.ShiftManager, viewName:string) {
     document.getElementById(`view-${viewName}`)!.classList.add('active-view');
     
     if (viewName === 'calendar') {
-        updateRuleSelect(state);
-
-        // TODO
-        // TODO
-        /*
-        renderCalendar();
-       */
+        updateRuleSelect(manager);
     }
 }
 
 /* --- Generator Logic --- */
-function updateRuleSelect(state: shiftManager.ShiftManager) {
+function updateRuleSelect(manager: shiftManager.ShiftManager) {
     const select = document.getElementById('rule-select');
     if (!select) return; // エラー回避
     select.innerHTML = '';
-    state.getRules().forEach((rule, idx) => {
+    manager.getRules().forEach((rule, idx) => {
         const option = document.createElement('option');
         option.value = idx.toString();
         option.textContent = rule.name;
@@ -99,70 +94,70 @@ function updateRuleSelect(state: shiftManager.ShiftManager) {
 }
 
 /* --- Config CRUD Actions --- */
-function addNewGroup(state: shiftManager.ShiftManager) {
-    state.addNewGroup();
-    renderConfig(state); 
+function addNewGroup(manager: shiftManager.ShiftManager) {
+    manager.addNewGroup();
+    renderConfig(manager); 
 }
 
-function removeGroup(state: shiftManager.ShiftManager, i:number) {
+function removeGroup(manager: shiftManager.ShiftManager, i:number) {
     if(confirm("Shift IDs?")) {
-        state.removeGroup(i)
-        renderConfig(state); 
+        manager.removeGroup(i)
+        renderConfig(manager); 
     } 
 }
 
-function updateGroupName(state: shiftManager.ShiftManager, i:number, v:string) {
-    state.updateGroupName(i, v)
-    renderConfig(state);
+function updateGroupName(manager: shiftManager.ShiftManager, i:number, v:string) {
+    manager.updateGroupName(i, v)
+    renderConfig(manager);
 }
 
-function addSlot(state:shiftManager.ShiftManager, i: number) {
-    state.addSlot(i)
-    renderConfig(state);
+function addSlot(manager:shiftManager.ShiftManager, i: number) {
+    manager.addSlot(i)
+    renderConfig(manager);
 }
 
-function removeSlot(state: shiftManager.ShiftManager, g:number, s:number) {
-    state.removeSlot(g, s);
-    renderConfig(state); 
+function removeSlot(manager: shiftManager.ShiftManager, g:number, s:number) {
+    manager.removeSlot(g, s);
+    renderConfig(manager); 
 }
 
-function updateSlotMemo(state: shiftManager.ShiftManager, g:number, s:number, v:string) { 
-    state.updateSlotMemo(g, s, v);
-    renderJSON(state); 
+function updateSlotMemo(manager: shiftManager.ShiftManager, g:number, s:number, v:string) { 
+    manager.updateSlotMemo(g, s, v);
+    renderJSON(manager); 
 }
 
-function addNewRule(state: shiftManager.ShiftManager) {
-    state.addWeek();
-    renderConfig(state); 
+function addNewRule(manager: shiftManager.ShiftManager) {
+    manager.addWeek();
+    renderConfig(manager); 
 }
 
-function removeRule(state: shiftManager.ShiftManager, i:number) {
+function removeRule(manager: shiftManager.ShiftManager, i:number) {
     if(confirm("Del?")) { 
-        state.removeRule(i);
-        renderConfig(state); 
+        manager.removeRule(i);
+        renderConfig(manager); 
     }
 }
 
-function updateRuleName(state: shiftManager.ShiftManager, i:number, v: string) {
-    state.updateRuleName(i, v);
-    renderJSON(state); 
-    updateRuleSelect(state); 
+function updateRuleName(manager: shiftManager.ShiftManager, i:number, v: string) {
+    manager.updateRuleName(i, v);
+    renderJSON(manager); 
+    updateRuleSelect(manager); 
 }
 
-function removeAssignment(state: shiftManager.ShiftManager, r: number, d:shiftManager.ShiftWeekday, s: shiftManager.ShiftTime, i:number) { 
-    state.removeRuleAssignment(r, d, s, i);
-    renderConfig(state);
+function removeAssignment(manager: shiftManager.ShiftManager, r: number, d:shiftManager.ShiftWeekday, s: shiftManager.ShiftTime, i:number) { 
+    manager.removeRuleAssignment(r, d, s, i);
+    renderConfig(manager);
 }
 
 /* --- Modal Actions --- */
-function openModal(state: shiftManager.ShiftManager, rIdx:number, day: ShiftWeekday, shift: ShiftTime) {
+function openModal(manager: shiftManager.ShiftManager, rIdx:number, day: ShiftWeekday, shift: ShiftTime) {
     const modalEl = document.getElementById('modal');
     const modalListEl = document.getElementById('modal-list')!;
 
     modalCtx = { rIdx, day, shift };
     modalListEl.replaceChildren();
 
-    state.getStaffGroups().forEach((group, gIdx) => {
+    manager.getStaffGroups().forEach((group, gIdx) => {
         const prefix = getGroupPrefix(gIdx);
         const color = getGroupColor(gIdx);
         const container = el('div', { style: { marginBottom: "20px" } }, 
@@ -177,7 +172,7 @@ function openModal(state: shiftManager.ShiftManager, rIdx:number, day: ShiftWeek
             grid.appendChild(el('div', { 
                 className: 'selection-btn', 
                 style: { borderLeftColor: color }, 
-                onclick: () => confirmAssignment(state, gIdx, sIdx) 
+                onclick: () => confirmAssignment(manager, gIdx, sIdx) 
             }, label));
         });
         
@@ -188,8 +183,8 @@ function openModal(state: shiftManager.ShiftManager, rIdx:number, day: ShiftWeek
     modalEl!.style.display = 'flex';
 }
 
-function confirmAssignment(state: shiftManager.ShiftManager, staffGroupId: number, shiftStaffIndex:number){
-    state.addRuleAssignment(
+function confirmAssignment(manager: shiftManager.ShiftManager, staffGroupId: number, shiftStaffIndex:number){
+    manager.addRuleAssignment(
         modalCtx!.rIdx,
         modalCtx!.day,
         modalCtx!.shift,
@@ -197,7 +192,7 @@ function confirmAssignment(state: shiftManager.ShiftManager, staffGroupId: numbe
         shiftStaffIndex
     );
     document.getElementById('modal')!.style.display = 'none';
-    renderConfig(state);
+    renderConfig(manager);
 }
 
 function closeModal() {
@@ -207,10 +202,6 @@ function closeModal() {
 /* ==========================================================================
    4. RENDER FUNCTIONS (描画関数)
    ========================================================================== */
-
-// --- Imports (Wasm generated files) ---
-// import { generateMonthlyView } from "./shift_engine.js"; 
-// ※ 実際はjco等で生成されたファイルをimportします
 
 // --- Global State for UI Control ---
 // Wasmに反映する前のチェックボックスの状態を一時保持するリスト
@@ -242,36 +233,75 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
     
     // 2. Managerから最新情報を取得
     const savedSkipFlags = manager.getSkipFlags(); 
+    console.log("savedSkipFlags", savedSkipFlags);
     const shiftList = manager.getMonthlyShift(); 
 
     // --- 配列初期化 (同期) ロジック ---
+    // if (pendingSkipFlags2.length !== weeksData.length) {
+    //     pendingSkipFlags2 = [];
+    // 
+    //     // この月自体の設定が保存されているか
+    //     const isCurrentConfigSaved = savedSkipFlags.length === weeksData.length;
+    // 
+    //     weeksData.forEach((week, i) => {
+    //         // その週に既にシフトが割り当てられているか？
+    //         const hasShiftData = shiftList[i] !== undefined;
+    // 
+    //         if (isCurrentConfigSaved) {
+    //             // A. 生成済みの場合 (savedSkipFlags を正とする)
+    //             if (savedSkipFlags[i]) {
+    //                 pendingSkipFlags2.push('fixed_skipped');
+    //             } else {
+    //                 pendingSkipFlags2.push('fixed_active');
+    //             }
+    //         } else {
+    //             // B. まだ生成していない場合 (編集中)
+    //             if (hasShiftData) {
+    //                 // まだ今月の生成はしていないが、前月の余波でシフトが入っている -> FIXED
+    //                 pendingSkipFlags2.push('fixed_active');
+    //             } else {
+    //                 // ★バグ修正:
+    //                 // データも設定もない場合は、月またぎ(Overlap)であっても
+    //                 // 編集可能な 'pending_active' (READY) にする。
+    //                 // これにより最初の月が FIXED SKIP になるのを防ぐ。
+    //                 pendingSkipFlags2.push('pending_active');
+    //             }
+    //         }
+    //     });
+    // }
+
+// --- 配列初期化 (同期) ロジック ---
     if (pendingSkipFlags2.length !== weeksData.length) {
         pendingSkipFlags2 = [];
 
-        // この月自体の設定が保存されているか
-        const isCurrentConfigSaved = savedSkipFlags.length === weeksData.length;
+        // ★修正: 配列全体の長さ判定(isCurrentConfigSaved)を廃止し、
+        // 週ごとのインデックスで判定するように変更
 
         weeksData.forEach((week, i) => {
-            // その週に既にシフトが割り当てられているか？
+            // A. この週に対する保存設定が「存在するか」確認
+            const savedFlag = savedSkipFlags[i];
+
+            // B. シフトデータが存在するか確認
             const hasShiftData = shiftList[i] !== undefined;
 
-            if (isCurrentConfigSaved) {
-                // A. 生成済みの場合 (savedSkipFlags を正とする)
-                if (savedSkipFlags[i]) {
+            if (savedFlag !== undefined) {
+                // ■ ケース1: 保存された設定がある場合 (最優先)
+                // savedSkipFlags[i] が true ならスキップ、false なら稼働
+                if (savedFlag) {
                     pendingSkipFlags2.push('fixed_skipped');
                 } else {
                     pendingSkipFlags2.push('fixed_active');
                 }
             } else {
-                // B. まだ生成していない場合 (編集中)
+                // ■ ケース2: 保存された設定がない場合 (未生成の週)
                 if (hasShiftData) {
-                    // まだ今月の生成はしていないが、前月の余波でシフトが入っている -> FIXED
+                    // 設定はないがデータがある (前月生成分の溢れなど) -> FIXED ACTIVE
                     pendingSkipFlags2.push('fixed_active');
                 } else {
-                    // ★バグ修正:
-                    // データも設定もない場合は、月またぎ(Overlap)であっても
-                    // 編集可能な 'pending_active' (READY) にする。
-                    // これにより最初の月が FIXED SKIP になるのを防ぐ。
+                    // 設定もデータもない -> これから編集する週 (READY)
+                    // ※月またぎの判定(isOverlap)をここで厳密にやると「最初の月が編集できない」問題が出るため、
+                    //   savedFlagがない場合は一律「編集可能」にします。
+                    //   (前月でスキップされたなら、通常はsavedFlagに[true]が入ってくるはずなのでこれで動きます)
                     pendingSkipFlags2.push('pending_active');
                 }
             }
@@ -485,17 +515,17 @@ function calculateCalendarDates(year: number, month: number) {
 
 // calendar ==========================
 
-function renderConfig(state: shiftManager.ShiftManager) { 
-    renderGroups(state); 
-    renderRules(state); 
-    renderJSON(state); 
-    updateRuleSelect(state); 
+function renderConfig(manager: shiftManager.ShiftManager) { 
+    renderGroups(manager); 
+    renderRules(manager); 
+    renderJSON(manager); 
+    updateRuleSelect(manager); 
 }
 
-function renderGroups(state: shiftManager.ShiftManager) {
+function renderGroups(manager: shiftManager.ShiftManager) {
     const container = document.getElementById('staff-groups-container')!;
     container.replaceChildren();
-    state.getStaffGroups().forEach((group, gIdx) => {
+    manager.getStaffGroups().forEach((group, gIdx) => {
         const prefix = getGroupPrefix(gIdx);
         const color = getGroupColor(gIdx);
         const slotListContainer = el('div', { className: 'slot-list' });
@@ -511,13 +541,13 @@ function renderGroups(state: shiftManager.ShiftManager) {
                         oninput: (e: Event) => { 
                                 const target = e.target as HTMLInputElement;
 
-                                updateSlotMemo(state, gIdx, sIdx, target.value);
+                                updateSlotMemo(manager, gIdx, sIdx, target.value);
                                 // target.textContent = ;
                         }
                 }),
                 el('button', { 
                         className: 'btn btn-danger btn-sm', 
-                        onclick: () => removeSlot(state, gIdx, sIdx) }, '×'
+                        onclick: () => removeSlot(manager, gIdx, sIdx) }, '×'
                   )
             ));
         });
@@ -525,7 +555,7 @@ function renderGroups(state: shiftManager.ShiftManager) {
         container.appendChild(el('div', { className: 'group-card', style: { borderTopColor: color } },
             el('div', { className: 'group-header' },
                 el('span', { className: 'group-id-badge', style: { backgroundColor: color } }, `ID: ${prefix}`),
-                el('button', { className: 'btn btn-danger btn-sm', onclick: () => removeGroup(state, gIdx) }, 'Delete')
+                el('button', { className: 'btn btn-danger btn-sm', onclick: () => removeGroup(manager, gIdx) }, 'Delete')
             ),
             el('input', { 
                     type: 'text',
@@ -534,7 +564,7 @@ function renderGroups(state: shiftManager.ShiftManager) {
                     placeholder: 'Group Name', 
                     oninput: (e:Event) => {
                             const target = e.target as HTMLInputElement;
-                            updateGroupName(state, gIdx, target.value) 
+                            updateGroupName(manager, gIdx, target.value) 
                     }
             }),
             slotListContainer,
@@ -542,17 +572,17 @@ function renderGroups(state: shiftManager.ShiftManager) {
                     className: 'btn btn-outline',
                     style: { width: '100%', fontSize: '0.8em' },
                     onclick: () => { 
-                            addSlot(state, gIdx);
+                            addSlot(manager, gIdx);
                     } }, '+ Add Slot')
         ));
     });
 }
 
-function renderRules(state: shiftManager.ShiftManager) {
+function renderRules(manager: shiftManager.ShiftManager) {
     const container = document.getElementById('rules-container')!;
     container.replaceChildren();
 
-    state.getRules().forEach((rule, rIdx) => {
+    manager.getRules().forEach((rule, rIdx) => {
         const theadTr = el('tr', {}, el('th', { className: 'config-row-header' }, 'Shift'));
         days.forEach((d) => theadTr.appendChild(el('th', {}, d.toUpperCase())));
         
@@ -563,7 +593,7 @@ function renderRules(state: shiftManager.ShiftManager) {
 
             days.forEach(day => {
                 const cell = el('td', {});
-                state
+                manager
                 .getRuleAssignment(rIdx, day, shiftType)!
                 .forEach((holl, arrIdx) => {
                     const gPrefix = holl.staffGroupId;
@@ -576,10 +606,10 @@ function renderRules(state: shiftManager.ShiftManager) {
                         className: 'chip', 
                         style: { backgroundColor: color }, 
                         title: holl, 
-                        onclick: () => removeAssignment(state, rIdx, day, shiftType, arrIdx) 
+                        onclick: () => removeAssignment(manager, rIdx, day, shiftType, arrIdx) 
                     }, label));
                 });
-                cell.appendChild(el('button', { className: 'add-btn-mini', onclick: () => openModal(state , rIdx, day, shiftType) }, '+'));
+                cell.appendChild(el('button', { className: 'add-btn-mini', onclick: () => openModal(manager , rIdx, day, shiftType) }, '+'));
                 tr.appendChild(cell);
             });
             tbody.appendChild(tr);
@@ -595,18 +625,18 @@ function renderRules(state: shiftManager.ShiftManager) {
                                 value: rule.name, 
                                 oninput: (e: Event) => {
                                         const target = e.target as HTMLInputElement;
-                                        updateRuleName(state, rIdx, target.value) 
+                                        updateRuleName(manager, rIdx, target.value) 
                                 }
                         }),
-                el('button', { className: 'btn btn-danger', onclick: () => removeRule(state, rIdx) }, 'Delete Rule')
+                el('button', { className: 'btn btn-danger', onclick: () => removeRule(manager, rIdx) }, 'Delete Rule')
             ),
             el('table', { className: 'config-table' }, el('thead', {}, theadTr), tbody)
         ));
     });
 }
 
-function renderJSON(state: shiftManager.ShiftManager) { 
-    document.getElementById('json-output')!.textContent = JSON.stringify({staffGroups: state.getStaffGroups(), rules: state.getRules()}, null, 2); 
+function renderJSON(manager: shiftManager.ShiftManager) { 
+    document.getElementById('json-output')!.textContent = JSON.stringify({staffGroups: manager.getStaffGroups(), rules: manager.getRules()}, null, 2); 
 }
 
 /* ==========================================================================
@@ -660,7 +690,7 @@ function initApp(manager: shiftManager.ShiftManager) {
         const year = manager.getYear();
         const month = manager.getMonth(); // 0-11
         
-        if (!confirm(`${year}年${month + 1}月以降のシフトを全てリセットしますか？\n(この操作は取り消せません)`)) {
+        if (!confirm(`後続するシフトは今月${year}年${month + 1}月の予定に依存するため、以降の月の予定はすべてリセットされます。この操作を続けますか？`)) {
             return;
         }
 
@@ -688,7 +718,6 @@ function initApp(manager: shiftManager.ShiftManager) {
         }
     }
 
-
     // Config Controls
     document.getElementById('add-group-btn')!.onclick = () => addNewGroup(manager);
     document.getElementById('add-rule-btn')!.onclick = () => addNewRule(manager);
@@ -706,8 +735,11 @@ function initApp(manager: shiftManager.ShiftManager) {
 }
 
 $init.then(() => {
-    let state = new shiftManager.ShiftManager();
+    let manager = new shiftManager.ShiftManager();
 
-    initApp(state);
+    initApp(manager);
+
+    // asyncExampleFunc()
+    //     .then((rstr) => {console.log(rstr)});
 })
 

@@ -1,5 +1,9 @@
 wit_bindgen::generate!({
     world: "shift-gen-world",
+    path: "./wit",
+    //async: [
+    //    "config-mock:config-mock@0.1.0-alpha/config-mock#async-func",
+    //],
     generate_all
 });
 
@@ -7,7 +11,7 @@ struct Component {}
 
 use config_mock::config_mock::config_mock::{
     get_staff_groups, 
-    get_week_rules
+    get_week_rules,
 };
 
 use chrono::{NaiveDate, Duration};

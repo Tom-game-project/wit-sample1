@@ -43,6 +43,7 @@ interface config-mock {
 
     get-staff-groups: func() -> staff-groups;
     get-week-rules: func() -> week-rules;
+    
 }
 
 world imports {

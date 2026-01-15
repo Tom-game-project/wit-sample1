@@ -12,6 +12,7 @@ use shift_calendar::{
 
 use crate::shift_gen::dummy::logger::logger::log;
 
+
 #[derive(Debug)]
 pub enum WeekStatus {
     Active { 
@@ -88,7 +89,8 @@ impl ShiftCalendarManager {
         &self, 
         abs_week: AbsWeek
     ) -> Result<usize, AppendWeekErrorKind> {
-        self.delta_to_index(self.abs_to_delta(abs_week)?)
+        // self.delta_to_index(self.abs_to_delta(abs_week)?)
+        Ok(abs_week - self.base_abs_week)
     }
 
     /// すでに作成したリストのなかにtarget_abs_weekを含み
@@ -138,12 +140,10 @@ impl ShiftCalendarManager {
         target_abs_week: AbsWeek,
         skip_flags: &[bool]
     ) -> Result<(), AppendWeekErrorKind> {
-        if self.timeline.len() < self.abs_to_delta(target_abs_week)? {
+        if self.timeline.len() + self.base_abs_week < target_abs_week {
+            log(&format!("timeline len {} abs_to_delta {}", self.timeline.len(), self.abs_to_delta(target_abs_week)?));
             return Err(AppendWeekErrorKind::NotConsecutiveShifts);
         }
-
-        log(&format!("append check: {:?}", self.timeline[self.abs_to_index(target_abs_week)?..].iter().collect::<Vec<_>>()));
-        log(&format!("skip_flags {:?}", skip_flags));
 
         if self
             .timeline[self.abs_to_index(target_abs_week)?..]
@@ -156,6 +156,7 @@ impl ShiftCalendarManager {
         {
             // Ok
         } else {
+            log(&format!("timeline len {} abs_to_delta {} abs index {}", self.timeline.len(), self.abs_to_delta(target_abs_week)?, self.abs_to_index(target_abs_week)?));
             return Err(AppendWeekErrorKind::AttemptedToOverwrite);
         }
         Ok(())
@@ -180,14 +181,11 @@ impl ShiftCalendarManager {
         //  let append_len = after_timeline_len (6) - self.timeline.len() (3); (3)
         //  let append_start_index = skip_flags.len() (4) - append_len (3); (1)     // append start index
         //  let append_skip_flags = [append_start_index..]
-        if self.timeline.len() <  self.abs_to_index(target_abs_week)? {
+        if self.timeline.len() < self.abs_to_index(target_abs_week)? {
             return Err(AppendWeekErrorKind::UnderFlow);
         }
         let append_start_index = self.timeline.len() - self.abs_to_index(target_abs_week)?;
 
-        log("apply_weeks");
-        log(&format!("skip_flagsの{}番目から追加します", append_start_index));
-        log(&format!("target_abs_week {} skip_flags {:?}", target_abs_week, skip_flags));
         for is_skipped in &skip_flags[append_start_index..] {
             self.append_week(*is_skipped);
         }

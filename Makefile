@@ -36,14 +36,20 @@ ENTRY_TS = \
 WIT_DEPS = \
 			component-features/wit/deps/dummy.wit \
 			component-features/wit/deps/config_mock.wit \
+			component-features/wit/deps/async_mock.wit \
 
 JS_SHIMS = \
 		   js/dummy-logger.js \
 		   js/config-mock.js \
+		   js/async-mock.js \
 
 JS_MAPS = \
 			--map 'dummy:logger/logger=./dummy-logger.js' \
 			--map 'config-mock:config-mock/config-mock=./config-mock.js' \
+			--map 'async-mock:async-mock/async-mock=./async-mock.js' \
+
+			#  --async-exports async-example-func \
+			#  --async-mode=jspi
 
 
 # rust client state logic

@@ -181,3 +181,12 @@ world shift-gen-world {
     export to-upper: func(input: string) -> string;
     export calculate-weeks-delta-from-base: func(year: s32, month: u32, day: u32) -> option<s64>;
 }
+
+
+world async-example-world {
+    import async-mock:async-mock/async-mock@0.1.0-alpha;
+	import dummy:logger/logger@0.1.0-alpha;
+
+    // 非同期関数を作れるかのテスト
+    export async-example-func: func() -> string;
+}
