@@ -321,7 +321,7 @@ impl GuestShiftManager for AppState {
             panic!()
         };
 
-        log(&format!("new:gen week abs {}", gen_week_abs));
+        // log(&format!("new:gen week abs {}", gen_week_abs));
 
         Self {
             staff_groups: RefCell::new(vec![]),
@@ -331,7 +331,7 @@ impl GuestShiftManager for AppState {
             schedule_data: RefCell::new(
                 ShiftCalendarManager::new(
                     gen_week_abs, //base_abs_week, 
-                    25 // initial_delta
+                    0 // initial_delta
                 )
             )
         }
@@ -674,7 +674,15 @@ impl GuestShiftManager for AppState {
     }
 
     fn output_calendar_manager_data(&self,) -> Result<String, String> {
-        self.schedule_data.borrow().output_inner_data()
+        self.schedule_data
+            .borrow()
+            .output_inner_data()
+    }
+
+    fn load_calendar_from_json(&self, json_setting:String) -> Result<(), String> {
+        self.schedule_data
+            .borrow_mut()
+            .load_calendar_from_json(json_setting)
     }
 }
 

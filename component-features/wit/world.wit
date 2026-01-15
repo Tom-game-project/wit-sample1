@@ -170,6 +170,10 @@ interface shift-manager {
         // jsonの設定を読んでルールをセットする関数
         load-config-from-json: func(json-setting: string) -> result<_, string>;
 
+        // jsonの設定を読んで、カレンダーをセットする
+        load-calendar-from-json: func(json-setting: string) -> result<_, string>;
+
+        // カレンダーのjson設定を出力する
         output-calendar-manager-data: func() -> result<string, string>;
     }
 }

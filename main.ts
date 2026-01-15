@@ -215,7 +215,7 @@ function closeModal() {
 
 // --- Global State ---
 type skip_states = "fixed_skipped" | "fixed_active" | "pending_active"| "pending_skipped";
-let pendingSkipFlags2: skip_states[] = [];
+let pendingSkipFlags: skip_states[] = [];
 
 function renderCalendar(manager: shiftManager.ShiftManager) {
     // 1. ラベル更新
@@ -233,12 +233,12 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
     
     // 2. Managerから最新情報を取得
     const savedSkipFlags = manager.getSkipFlags(); 
-    console.log("savedSkipFlags", savedSkipFlags);
+    // console.log("savedSkipFlags", savedSkipFlags);
     const shiftList = manager.getMonthlyShift(); 
 
     // --- 配列初期化 (同期) ロジック ---
-    if (pendingSkipFlags2.length !== weeksData.length) {
-        pendingSkipFlags2 = [];
+    if (pendingSkipFlags.length !== weeksData.length) {
+        pendingSkipFlags = [];
 
         // ★修正: 配列全体の長さ判定(isCurrentConfigSaved)を廃止し、
         // 週ごとのインデックスで判定するように変更
@@ -254,21 +254,21 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
                 // ■ ケース1: 保存された設定がある場合 (最優先)
                 // savedSkipFlags[i] が true ならスキップ、false なら稼働
                 if (savedFlag) {
-                    pendingSkipFlags2.push('fixed_skipped');
+                    pendingSkipFlags.push('fixed_skipped');
                 } else {
-                    pendingSkipFlags2.push('fixed_active');
+                    pendingSkipFlags.push('fixed_active');
                 }
             } else {
                 // ■ ケース2: 保存された設定がない場合 (未生成の週)
                 if (hasShiftData) {
                     // 設定はないがデータがある (前月生成分の溢れなど) -> FIXED ACTIVE
-                    pendingSkipFlags2.push('fixed_active');
+                    pendingSkipFlags.push('fixed_active');
                 } else {
                     // 設定もデータもない -> これから編集する週 (READY)
                     // ※月またぎの判定(isOverlap)をここで厳密にやると「最初の月が編集できない」問題が出るため、
                     //   savedFlagがない場合は一律「編集可能」にします。
                     //   (前月でスキップされたなら、通常はsavedFlagに[true]が入ってくるはずなのでこれで動きます)
-                    pendingSkipFlags2.push('pending_active');
+                    pendingSkipFlags.push('pending_active');
                 }
             }
         });
@@ -278,7 +278,7 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
 
     weeksData.forEach((week, index) => {
         const weekShiftData = shiftList[index];
-        const skipState = pendingSkipFlags2[index];
+        const skipState = pendingSkipFlags[index];
 
         // --- ステータス決定 ---
         let rowClass = "";
@@ -334,9 +334,9 @@ function renderCalendar(manager: shiftManager.ShiftManager) {
         checkbox.addEventListener('change', (e) => {
             const isChecked = (e.target as HTMLInputElement).checked;
             if (isChecked) {
-                pendingSkipFlags2[index] = 'pending_skipped';
+                pendingSkipFlags[index] = 'pending_skipped';
             } else {
-                pendingSkipFlags2[index] = 'pending_active';
+                pendingSkipFlags[index] = 'pending_active';
             }
             renderCalendar(manager); 
         });
@@ -623,31 +623,31 @@ function initApp(manager: shiftManager.ShiftManager) {
     document.getElementById('prev-btn')!.onclick = () => {
         manager.changePrevMonth();
         // 月が変わったらフラグもリセット
-        pendingSkipFlags2 = [];
+        pendingSkipFlags = [];
         renderCalendar(manager);
     };
 
     document.getElementById('next-btn')!.onclick = () => {
         manager.changeNextMonth();
-        pendingSkipFlags2 = [];
+        pendingSkipFlags = [];
         renderCalendar(manager);
     };
 
     // ★ Generate Button Implementation
     document.getElementById('generate-btn')!.onclick = () => {
-        console.log("Applying Rules:", pendingSkipFlags2);
+        console.log("Applying Rules:", pendingSkipFlags);
 
         try {
             // 1. UIで設定されたフラグリスト(pendingSkipFlags)をWasmに渡す
             //    WIT定義: apply-month-shift: func(skip-flags: list<bool>)
-            manager.applyMonthShift(pendingSkipFlags2
+            manager.applyMonthShift(pendingSkipFlags
                 .map((i) => i == 'fixed_skipped' || i == 'pending_skipped'));
         } catch (e) {
             console.error("Failed to generate shift:", e);
             alert("シフト生成に失敗しました");
         }
         // 2. 適用後の状態を再描画 (getMonthlyShiftの結果が変わるはず)
-        pendingSkipFlags2 = [];
+        pendingSkipFlags = [];
         renderCalendar(manager);
     };
 
@@ -675,7 +675,7 @@ function initApp(manager: shiftManager.ShiftManager) {
 
             // 成功したらローカル状態をクリアして再描画
             // -> savedSkipFlags が空になるため、自動的に READY (青) に戻る
-            pendingSkipFlags2 = [];
+            pendingSkipFlags = [];
             renderCalendar(manager);
             
         } catch (e) {
@@ -684,7 +684,80 @@ function initApp(manager: shiftManager.ShiftManager) {
         }
     }
 
-// --- JSON Load/Save Controls ---
+// ==========================================
+    // ★ Calendar Data Import / Export Logic
+    // ==========================================
+    
+    const calFileInput = document.getElementById('calendar-file-input') as HTMLInputElement;
+    const calImportBtn = document.getElementById('import-calendar-btn');
+    const calExportBtn = document.getElementById('export-calendar-btn');
+
+    // --- 1. Load (Import) ---
+    if (calImportBtn) {
+        calImportBtn.onclick = () => {
+            calFileInput.click();
+        };
+    }
+
+    if (calFileInput) {
+        calFileInput.onchange = async (e) => {
+            const target = e.target as HTMLInputElement;
+            const file = target.files?.[0];
+            if (!file) return;
+
+            try {
+                const jsonText = await file.text();
+
+                // Wasm API呼び出し
+                // load-calendar-from-json: func(json-setting: string) -> result<_, string>;
+                manager.loadCalendarFromJson(jsonText);
+
+                // ★重要: ロード後はローカルの編集状態をクリアし、ロードしたデータを正とする
+                pendingSkipFlags = [];
+
+                // 再描画
+                renderCalendar(manager);
+                alert(`カレンダーデータを読み込みました: ${file.name}`);
+
+            } catch (err: any) {
+                console.error("Calendar Load Error:", err);
+                alert(`読み込みに失敗しました:\n${err}`);
+            } finally {
+                calFileInput.value = ''; // リセット
+            }
+        };
+    }
+
+    // --- 2. Save (Export) ---
+    if (calExportBtn) {
+        calExportBtn.onclick = () => {
+            try {
+                // Wasm API呼び出し
+                // output-calendar-manager-data: func() -> result<string, string>;
+                const jsonStr = manager.outputCalendarManagerData();
+
+                // ダウンロード処理
+                const blob = new Blob([jsonStr], { type: "application/json" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                // ファイル名に日時を入れると便利
+                // const timestamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, "");
+
+                a.download = `カレンダーデータ${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+            } catch (err: any) {
+                console.error("Calendar Export Error:", err);
+                alert(`保存に失敗しました:\n${err}`);
+            }
+        };
+    }
+
+    // --- JSON Load/Save Controls ---
 
     const fileInput = document.getElementById('config-file-input') as HTMLInputElement;
     const importBtn = document.getElementById('import-json-btn');
@@ -743,7 +816,7 @@ function initApp(manager: shiftManager.ShiftManager) {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `shift_config_${new Date().toISOString().slice(0, 10)}.json`;
+            a.download = `シフト設定データ${new Date().toISOString().slice(0, 10)}.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);

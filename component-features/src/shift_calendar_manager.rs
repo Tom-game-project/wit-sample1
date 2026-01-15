@@ -320,9 +320,17 @@ impl ShiftCalendarManager {
             }
         }
     }
+
+    pub fn load_calendar_from_json(&mut self, json_str: String) -> Result<(), String>{
+        let mut config: ShiftCalendarManager = serde_json::from_str(&json_str)
+            .map_err(|e| format!("JSON parse error: {}", e))?;
+
+        self.base_abs_week = config.base_abs_week;
+        self.initial_delta = config.initial_delta;
+        self.timeline = config.timeline;
+        Ok(())
+    }
 }
-
-
 
 
 // ==================================== test ==================================== 
