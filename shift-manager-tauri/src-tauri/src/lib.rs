@@ -13,6 +13,26 @@ mod domain;
 mod infrastructure;
 mod application;
 
+use sqlx::SqlitePool;
+use infrastructure::calendar_repo::CalendarRepository;
+use infrastructure::rule_repo::RuleRepository;
+
+// 全てのリポジトリを保持するコンテナ
+pub struct AppServices {
+    pub calendar: CalendarRepository,
+    pub rule: RuleRepository,
+}
+
+impl AppServices {
+    pub fn new(pool: SqlitePool) -> Self {
+        Self {
+            // poolは内部で参照カウントされているのでcloneしても低コスト
+            calendar: CalendarRepository::new(pool.clone()),
+            rule: RuleRepository::new(pool),
+        }
+    }
+}
+
 // =====================
 // greet
 // =====================

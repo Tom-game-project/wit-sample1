@@ -275,3 +275,7 @@ mod repository_tests {
         println!("test_delete_from_abs_week -> Ok");
     }
 }
+
+// calendar の操作は簡単にユーザーが月指定でできるように実装する
+//
+//
