@@ -43,5 +43,10 @@ make BUILD=release bun-bundle
 
 - work_shift_dayoff_logic
 
+
+## shift-manager-tauri
+
+tauriを使ったネイティブアプリ版
+
 ## TODO
 
