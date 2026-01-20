@@ -4,7 +4,7 @@ use sqlx::{
     FromRow
 };
 
-use crate::domain::models::{ShiftCalendarManager, WeekStatus};
+use crate::domain::shift_calendar_model::*;
 
 pub struct CalendarRepository {
     pool: SqlitePool,
@@ -128,6 +128,47 @@ impl CalendarRepository {
             timeline,
         }))
     }
+
+    /// 指定された絶対週番号以降（その週を含む）のデータを削除する
+    /// 例: baseが100で、102を指定した場合、102, 103... (offset 2以降) が削除される
+    pub async fn delete_from_abs_week(&self, target_abs_week: usize) -> Result<u64, String> {
+        // 1. まず最新のカレンダー情報を取得して、IDと基準週を知る必要がある
+        let header_opt: Option<CalendarHeaderRow> = sqlx::query_as::<sqlx::Sqlite, CalendarHeaderRow>(
+            "SELECT id, base_abs_week, initial_delta FROM shift_calendars ORDER BY id DESC LIMIT 1",
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e: sqlx::Error| e.to_string())?;
+
+        let header = match header_opt {
+            Some(h) => h,
+            None => return Ok(0), // データがなければ削除するものもない
+        };
+
+        // 2. 削除基準となるオフセットを計算
+        // target_abs_week = base_abs_week + week_offset
+        // つまり week_offset = target_abs_week - base_abs_week
+        let base = header.base_abs_week as usize;
+
+        let threshold_offset = if target_abs_week < base {
+            // 指定週が基準より前なら、全データを消す（0以上のオフセットを対象にする）
+            0
+        } else {
+            target_abs_week - base
+        };
+
+        // 3. 削除実行
+        let result = sqlx::query(
+            "DELETE FROM weekly_statuses WHERE calendar_id = ?1 AND week_offset >= ?2"
+        )
+        .bind(header.id)
+        .bind(threshold_offset as i64)
+        .execute(&self.pool)
+        .await
+        .map_err(|e: sqlx::Error| e.to_string())?;
+
+        Ok(result.rows_affected())
+    }
 }
 
 #[cfg(test)]
@@ -191,5 +232,46 @@ mod repository_tests {
         assert_eq!(fetched_data.base_abs_week, input_data.base_abs_week);
         assert_eq!(fetched_data.initial_delta, input_data.initial_delta);
         assert_eq!(fetched_data.timeline, input_data.timeline);
+        println!("test_save_and_find_latest -> Ok");
+    }
+
+    #[tokio::test]
+    async fn test_delete_from_abs_week() {
+        // 1. 準備
+        let pool = setup_test_db().await;
+        let repository = CalendarRepository::new(pool);
+
+        // テストデータ: Base=100
+        // offset 0 => 100週目
+        // offset 1 => 101週目
+        // offset 2 => 102週目
+        let input_data = ShiftCalendarManager {
+            id: None,
+            base_abs_week: 100,
+            initial_delta: 0,
+            timeline: vec![
+                WeekStatus::Active { logical_delta: 1 }, // offset 0 (Week 100)
+                WeekStatus::Skipped,                     // offset 1 (Week 101)
+                WeekStatus::Active { logical_delta: 2 }, // offset 2 (Week 102)
+                WeekStatus::Skipped,                     // offset 3 (Week 103)
+            ],
+        };
+        repository.save(&input_data).await.expect("Failed to save");
+
+        // 2. 実行: 102週目以降を削除したい
+        let deleted_count = repository.delete_from_abs_week(102).await.expect("Failed to delete");
+
+        // 3. 検証
+        // 102(offset 2) と 103(offset 3) の2つが消えているはず
+        assert_eq!(deleted_count, 2);
+
+        // 最新データを取得して中身を確認
+        let updated_data = repository.find_latest().await.expect("Failed to find").unwrap();
+
+        // 残っているのは offset 0 と 1 だけのはず
+        assert_eq!(updated_data.timeline.len(), 2);
+        assert_eq!(updated_data.timeline[0], WeekStatus::Active { logical_delta: 1 }); // 100
+        assert_eq!(updated_data.timeline[1], WeekStatus::Skipped);                     // 101
+        println!("test_delete_from_abs_week -> Ok");
     }
 }

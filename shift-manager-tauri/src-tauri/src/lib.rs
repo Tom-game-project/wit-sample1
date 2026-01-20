@@ -11,6 +11,7 @@ use tauri::Manager;
 
 mod domain;
 mod infrastructure;
+mod application;
 
 // =====================
 // greet
@@ -58,7 +59,7 @@ pub fn run() {
                     .await
                     .expect("failed to open db");
 
-                // 2. 子テーブル
+                // 2. テーブル
                 sqlx::migrate!("./migrations")
                     .run(&pool)
                     .await

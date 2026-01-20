@@ -1,10 +1,4 @@
-// =====================
-// ドメインモデル定義
-// =====================
-
 use serde::{Serialize, Deserialize};
-use shift_calendar::shift_gen;
-
 // 絶対週番号と論理デルタの型エイリアス
 pub type AbsWeek = usize;
 pub type LogicalDelta = usize;
@@ -14,7 +8,6 @@ pub enum WeekStatus {
     Active { logical_delta: LogicalDelta },
     Skipped,
 }
-
 
 /// シフトカレンダー管理者（メイン構造体）
 #[derive(Debug, Deserialize, Serialize)]
@@ -30,3 +23,6 @@ pub struct ShiftCalendarManager {
     pub initial_delta: LogicalDelta,
     pub timeline: Vec<WeekStatus>,
 }
+
+
+
