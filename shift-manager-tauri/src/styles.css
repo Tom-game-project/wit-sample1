@@ -220,3 +220,42 @@ body {
   margin-top: 20px;
   text-align: right;
 }
+
+/* --- 既存のスイッチスタイルに追加・上書き --- */
+
+/* 1. Pending Active (未確定・稼働): 明るい青 (デフォルト) */
+.slider {
+  background-color: #2196F3;
+}
+
+/* 2. Pending Skip (未確定・休み): グレー */
+input:checked + .slider {
+  background-color: #ccc;
+}
+
+/* --- ★追加: 確定済み(Fixed)のスタイル --- */
+
+/* 3. Fixed Active (確定・稼働): 濃い青 + ロック感 */
+input:disabled + .slider.fixed-active {
+  background-color: #0d47a1; /* Deep Blue */
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 4. Fixed Skip (確定・休み): 濃い赤/茶色 + ロック感 */
+input:disabled + .slider.fixed-skip {
+  background-color: #c62828; /* Deep Red */
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Disabled時のスライダーの丸ポチの色も少し暗くする */
+input:disabled + .slider:before {
+  background-color: #e0e0e0;
+}
+
+/* ラベルテキストの色分け */
+.text-active { color: #2196F3; font-weight: bold; }
+.text-skip   { color: #999; font-weight: bold; }
+.text-fixed-active { color: #0d47a1; font-weight: 900; }
+.text-fixed-skip   { color: #c62828; font-weight: 900; }

@@ -61,3 +61,17 @@ export interface ShiftCalendarManager {
   initialDelta: number;
   timeline: WeekStatus[];
 }
+
+// 決定したシフトの型
+export interface DailyShiftDto {
+    morning: string[];
+    afternoon: string[];
+}
+
+export interface WeeklyShiftDto {
+    days: DailyShiftDto[];
+}
+
+export interface MonthlyShiftResult {
+    weeks: (WeeklyShiftDto | null)[];
+}

@@ -287,6 +287,17 @@ impl RuleRepository {
             rules: rules_with_assignments,
         })
     }
+
+    // Generate用に、ルールIDと名前だけのリストをソート順で取得する軽量メソッド
+    pub async fn get_rules_sorted(&self, plan_id: i64) -> Result<Vec<WeeklyRule>, String> {
+        sqlx::query_as::<_, WeeklyRule>(
+            "SELECT id, plan_id, name, sort_order FROM weekly_rules WHERE plan_id = ? ORDER BY sort_order ASC"
+        )
+        .bind(plan_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| e.to_string())
+    }
 }
 
 #[cfg(test)]

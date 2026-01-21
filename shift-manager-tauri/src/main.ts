@@ -2,7 +2,7 @@ import "./styles.css";
 import { invoke } from "@tauri-apps/api/core";
 import type { 
     Plan, PlanConfig, StaffGroupWithMembers, WeeklyRuleWithAssignments, 
-    ShiftCalendarManager, WeekStatus, RuleAssignment
+    ShiftCalendarManager, WeekStatus, RuleAssignment, MonthlyShiftResult
 } from "./types";
 
 /* ==========================================================================
@@ -12,6 +12,14 @@ let currentPlanId: number | null = null;
 let currentConfig: PlanConfig | null = null;
 let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
+
+// 編集中のスキップ状態を保持するマップ
+// Key: "YYYY-MM-DD" (週の月曜日の日付文字列)
+// Value: true = Skip, false = Active
+let pendingSkips: Record<string, boolean> = {};
+// 状態を表す型定義
+type WeekState = 'pending_active' | 'pending_skip' | 'fixed_active' | 'fixed_skip';
+
 
 // ==========================================
 // UTILITIES
@@ -450,7 +458,7 @@ async function addAssignment(ruleId: number, weekday: number, shiftTime: number,
 
 async function removeAssignment(assignmentId: number) {
     // 誤操作防止の確認
-    // if (!confirm("Remove this assignment?")) return; // 確認が煩わしい場合はコメントアウトしてください
+    if (!confirm("Remove this assignment?")) return; // 確認が煩わしい場合はコメントアウトしてください
 
     try {
         // Rustコマンド呼び出し
@@ -483,45 +491,221 @@ async function updateMemberName(memberId: number) {
 /* ==========================================================================
    CALENDAR VIEW
    ========================================================================== */
+
+
 async function renderCalendarView() {
     if (!currentPlanId) return;
-    
+
     const label = document.getElementById('current-month-label');
-    if (label) label.textContent = new Date(currentYear, currentMonth, 1).toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
+    if (label) {
+        const date = new Date(currentYear, currentMonth, 1);
+        label.textContent = date.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long' });
+    }
 
     const mount = document.getElementById('calendar-mount');
-    if(!mount) return;
-    mount.innerHTML = 'Loading...';
+    if (!mount) return;
+    mount.innerHTML = '<div style="padding:20px; text-align:center;">Loading...</div>';
 
+    // 1. カレンダーの日付構造を計算
     const weeksData = calculateCalendarDates(currentYear, currentMonth);
 
-    // 状態取得
-    let savedManager: ShiftCalendarManager | null = null;
+    // 1. Rustから「確定シフトデータ」を取得
+    let shiftData: MonthlyShiftResult = { weeks: [] };
     try {
-        savedManager = await invoke<ShiftCalendarManager>("get_calendar_state", { planId: currentPlanId });
-    } catch(e) {}
+        shiftData = await invoke<MonthlyShiftResult>("derive_monthly_shift", {
+            planId: currentPlanId,
+            targetYear: currentYear,
+            targetMonth: currentMonth
+        });
+        console.log("shiftData", shiftData);
+    } catch (e) {
+        console.error("Failed to derive shifts:", e);
+    }
+
+    // 2. DBから保存済みの状態を取得 (Fixed判定用)
+    let savedTimeline: WeekStatus[] = [];
+    try {
+        const savedManager = await invoke<ShiftCalendarManager>("get_calendar_state", { planId: currentPlanId });
+        if (savedManager) {
+            savedTimeline = savedManager.timeline;
+        }
+    } catch (e) {
+        // 保存データがない場合は空の配列として扱う
+    }
 
     mount.innerHTML = '';
+
     weeksData.forEach((week, i) => {
+        // 週を識別するキー (月曜日の日付文字列)
+        const weekKey = week.days[0].toISOString().split('T')[0];
+
+        // --- ステータス決定ロジック ---
+        let state: WeekState = 'pending_active'; // デフォルト
+
+        // DBの保存データと照合 (簡易的に配列インデックス i を使用)
+        // ※ 本格運用では abs_week の計算と照合が必要ですが、現状はこれで動作します
+        const savedStatus = savedTimeline[i];
+
+        if (savedStatus) {
+            // ■ 確定済み (DBにデータあり)
+            // RustのEnumはTagged Union { type: "active", ... } | { type: "skipped", ... } で返る
+            if (savedStatus.type === 'skipped') {
+                state = 'fixed_skip';
+            } else {
+                state = 'fixed_active';
+            }
+        } else {
+            // ■ 未確定 (DBにデータなし -> UIの操作履歴を参照)
+            if (pendingSkips[weekKey] === true) {
+                state = 'pending_skip';
+            } else {
+                state = 'pending_active';
+            }
+        }
+
+        // --- DOM生成 ---
         const row = document.createElement('div');
-        row.className = 'cal-week-row';
-        row.style.display = 'flex';
-        row.style.borderBottom = '1px solid #eee';
+        row.className = 'cal-week-row'; // CSS: .cal-week-row
 
-        // 簡易表示: ステータス
-        const control = document.createElement('div');
-        control.style.width = '100px';
-        control.style.padding = '5px';
-        control.textContent = `Week ${i+1}`;
-        row.appendChild(control);
+        // [左カラム] コントロール (スイッチ & ラベル)
+        const controlCell = document.createElement('div');
+        controlCell.className = 'cal-cell-control'; // CSS: .cal-cell-control
 
-        week.days.forEach(day => {
+        // スイッチ部分
+        const switchLabel = document.createElement('label');
+        switchLabel.className = 'switch'; // CSS: .switch
+
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+
+        // 状態に応じた Input の設定
+        switch (state) {
+            case 'pending_active':
+                input.checked = false;
+                input.disabled = false;
+                break;
+            case 'pending_skip':
+                input.checked = true;
+                input.disabled = false;
+                break;
+            case 'fixed_active':
+                input.checked = false;
+                input.disabled = true; // 変更不可
+                break;
+            case 'fixed_skip':
+                input.checked = true;
+                input.disabled = true; // 変更不可
+                break;
+        }
+
+        // イベント: 未確定(Pending)の場合のみ状態を更新
+        input.onchange = (e) => {
+            const isChecked = (e.target as HTMLInputElement).checked;
+            pendingSkips[weekKey] = isChecked;
+
+            // ラベルの動的更新
+            const textEl = controlCell.querySelector('.status-text') as HTMLElement;
+            if (textEl) {
+                textEl.textContent = isChecked ? "SKIP" : "ACTIVE";
+                textEl.className = `status-text ${isChecked ? 'text-skip' : 'text-active'}`;
+            }
+        };
+
+        const slider = document.createElement('span');
+        // CSSクラスを動的に付与して色を変える (例: slider fixed-active)
+        slider.className = `slider ${state.replace('_', '-')}`;
+
+        switchLabel.appendChild(input);
+        switchLabel.appendChild(slider);
+        controlCell.appendChild(switchLabel);
+
+        // テキストラベル部分
+        const statusText = document.createElement('span');
+        statusText.classList.add('status-text'); // 共通クラス
+        
+        let labelText = "";
+        let labelColorClass = "";
+
+        switch (state) {
+            case 'pending_active': 
+                labelText = "ACTIVE"; 
+                labelColorClass = "text-active"; 
+                break;
+            case 'pending_skip':   
+                labelText = "SKIP";   
+                labelColorClass = "text-skip"; 
+                break;
+            case 'fixed_active':   
+                labelText = "FIXED";  
+                labelColorClass = "text-fixed-active"; 
+                break;
+            case 'fixed_skip':     
+                labelText = "VOID";   
+                labelColorClass = "text-fixed-skip"; 
+                break;
+        }
+
+        statusText.classList.add(labelColorClass);
+        statusText.textContent = labelText;
+        statusText.style.fontSize = "0.7em";
+        statusText.style.fontWeight = "bold";
+        statusText.style.marginTop = "4px";
+
+        controlCell.appendChild(statusText);
+        row.appendChild(controlCell);
+
+        // [右カラム] 日付セル
+        week.days.forEach((day, dayIndex)=> {
             const cell = document.createElement('div');
-            cell.style.flex = '1';
-            cell.style.borderLeft = '1px solid #eee';
-            cell.style.padding = '5px';
+            cell.className = 'cal-cell-day'; // CSS: .cal-cell-day
             cell.textContent = day.getDate().toString();
-            if (day.getMonth() !== currentMonth) cell.style.color = '#ccc';
+
+            // 今月以外の日付は薄く
+            if (day.getMonth() !== currentMonth) {
+                cell.style.opacity = '0.3';
+            }
+
+            // 確定済み(Fixed)の週は背景色を変えて「ロック感」を出す
+            if (state.startsWith('fixed')) {
+                cell.style.backgroundColor = '#f9f9f9';
+                cell.style.color = '#888';
+            }
+
+            // TODO: ここに実際のシフト内容 (Activeの場合) を描画する処理が入ります
+            // if (state === 'fixed_active' || state === 'pending_active') { ... }
+            // ★★★ ここが追加部分: 確定シフトの描画 ★★★
+            // 「この週のデータが存在する」かつ「状態が FIXED ACTIVE」の場合のみ描画
+            const weekShift = shiftData.weeks[i];
+
+            if (state === 'fixed_active' && weekShift || weekShift != null /* ここの条件はテスト用 */ ) {
+                const dailyShift = weekShift.days[dayIndex];
+                if (dailyShift) {
+                    // 午前
+                    if (dailyShift.morning.length > 0) {
+                        const mBadge = document.createElement('div');
+                        mBadge.style.fontSize = '0.75em';
+                        mBadge.style.backgroundColor = '#e3f2fd'; // 薄い青
+                        mBadge.style.color = '#0d47a1';
+                        mBadge.style.padding = '2px 4px';
+                        mBadge.style.borderRadius = '3px';
+                        mBadge.style.marginBottom = '2px';
+                        mBadge.textContent = `AM: ${dailyShift.morning.join(', ')}`;
+                        cell.appendChild(mBadge);
+                    }
+                    // 午後
+                    if (dailyShift.afternoon.length > 0) {
+                        const aBadge = document.createElement('div');
+                        aBadge.style.fontSize = '0.75em';
+                        aBadge.style.backgroundColor = '#fce4ec'; // 薄いピンク
+                        aBadge.style.color = '#c2185b';
+                        aBadge.style.padding = '2px 4px';
+                        aBadge.style.borderRadius = '3px';
+                        aBadge.textContent = `PM: ${dailyShift.afternoon.join(', ')}`;
+                        cell.appendChild(aBadge);
+                    }
+                }
+            }
+
             row.appendChild(cell);
         });
 
@@ -554,8 +738,6 @@ function calculateCalendarDates(year: number, month: number) {
     }
     return weeks;
 }
-
-
 
 function setupEventListeners() {
     // 1. プラン選択 (Plan Select)
