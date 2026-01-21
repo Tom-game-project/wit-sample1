@@ -2,10 +2,11 @@ use serde::{Serialize, Deserialize};
 // 絶対週番号と論理デルタの型エイリアス
 pub type AbsWeek = usize;
 pub type LogicalDelta = usize;
+pub type RuleID = usize;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub enum WeekStatus {
-    Active { logical_delta: LogicalDelta },
+    Active { logical_delta: LogicalDelta, rule_id: RuleID },
     Skipped,
 }
 

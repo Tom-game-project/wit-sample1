@@ -1,5 +1,4 @@
-use serde::{Serialize, Deserialize};
-use shift_calendar::shift_gen;
+use serde::{Serialize};
 //
 // Rules
 //
@@ -42,7 +41,7 @@ pub struct WeeklyRule {
 }
 
 // --- 5. Rule Assignment (Holl) ---
-#[derive(Debug, Serialize, FromRow)]
+#[derive(Debug, Serialize, FromRow, Clone)]
 #[serde(rename_all = "camelCase")] // JS側は camelCase が一般的
 pub struct RuleAssignment {
     pub id: i64,
