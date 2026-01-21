@@ -1,24 +1,114 @@
-<!doctype html>
-<html lang="ja">
+<!DOCTYPE html>
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="stylesheet" href="/src/styles.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Shift Manager</title>
-    <script type="module" src="/src/main.ts" defer></script>
+    <!--<link rel="stylesheet" href="styles.css" />-->
   </head>
-
   <body>
-    <main class="container">
-      <h1>Shift Calendar Manager</h1>
+    <nav class="app-header">
+      <div class="header-left">
+        <h1 class="app-title">📅 Shift Manager</h1>
+        
+        <div class="plan-selector">
+          <select id="plan-select" class="form-select">
+            <option value="" disabled selected>Select Plan...</option>
+          </select>
+          <button id="create-plan-btn" class="btn btn-sm btn-outline-light" title="Create New Plan">+</button>
+        </div>
+      </div>
 
-      <form class="row" id="greet-form">
-        <input id="greet-input" placeholder="名前を入力..." />
-        <button type="submit">Greet</button>
-      </form>
+      <div class="view-switcher">
+        <button class="view-btn active" id="switch-viewer">Viewer</button>
+        <button class="view-btn" id="switch-config">Config</button>
+      </div>
+    </nav>
 
-      <p id="greet-msg"></p>
+    <main class="main-viewport">
       
-      </main>
+      <div id="view-calendar" class="view-section active-view">
+        <div class="container">
+          <div class="calendar-controls-bar">
+            <div class="nav-controls">
+              <button class="btn btn-outline" id="prev-btn">&lt; Prev</button>
+              <span class="month-label" id="current-month-label">---</span>
+              <button class="btn btn-outline" id="next-btn">Next &gt;</button>
+            </div>
+
+            <div class="action-controls">
+              <button id="generate-btn" class="btn btn-primary">Generate / Save</button>
+              <button id="reset-btn" class="btn btn-danger btn-sm">Reset Future</button>
+            </div>
+            
+            <div class="file-controls">
+              <input type="file" id="calendar-file-input" accept=".json" style="display: none;">
+              <button id="import-calendar-btn" class="btn btn-outline btn-sm">📂 Import</button>
+              <button id="export-calendar-btn" class="btn btn-outline btn-sm">💾 Export</button>
+            </div>
+          </div>
+
+          <div class="calendar-header-row">
+            <div class="cal-header-cell status-col">Status</div>
+            <div class="cal-header-cell">Mon</div>
+            <div class="cal-header-cell">Tue</div>
+            <div class="cal-header-cell">Wed</div>
+            <div class="cal-header-cell">Thu</div>
+            <div class="cal-header-cell">Fri</div>
+            <div class="cal-header-cell">Sat</div>
+            <div class="cal-header-cell">Sun</div>
+          </div>
+          <div id="calendar-mount" class="calendar-grid"></div>
+        </div>
+      </div>
+
+      <div id="view-config" class="view-section">
+        <div class="container config-container">
+          
+          <section class="config-section">
+            <div class="section-header">
+              <h2>👥 Staff Groups</h2>
+              <button id="add-group-btn" class="btn btn-primary btn-sm">+ Add Group</button>
+            </div>
+            <div id="staff-groups-container" class="card-list"></div>
+          </section>
+
+          <section class="config-section">
+            <div class="section-header">
+              <h2>⚙️ Weekly Rules</h2>
+              <button id="add-rule-btn" class="btn btn-primary btn-sm">+ Add Rule</button>
+            </div>
+            <div id="rules-container" class="card-list"></div>
+          </section>
+
+          <section class="config-section">
+            <div class="section-header">
+              <h2>💾 Config Data</h2>
+              <div>
+                <input type="file" id="config-file-input" accept=".json" style="display: none;">
+                <button id="import-json-btn" class="btn btn-outline btn-sm">Load JSON</button>
+                <button id="download-json-btn" class="btn btn-outline btn-sm">Save JSON</button>
+              </div>
+            </div>
+            <pre id="json-output" class="json-preview"></pre>
+          </section>
+
+        </div>
+      </div>
+
+    </main>
+
+    <div id="modal" class="modal">
+      <div class="modal-content">
+        <h3 id="modal-title">Edit</h3>
+        <div id="modal-body">
+          </div>
+        <div class="modal-footer">
+          <button id="modal-cancel-btn" class="btn btn-outline">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <script type="module" src="./src/main.ts"></script>
   </body>
 </html>

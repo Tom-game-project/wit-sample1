@@ -22,6 +22,7 @@ pub struct CalendarRepository {
 #[derive(FromRow)]
 struct CalendarHeaderRow {
     id: i64,
+    plan_id: PlanId,
     base_abs_week: i64,
     initial_delta: i64,
 }
@@ -57,7 +58,7 @@ impl TryFrom<WeekStatusRow> for WeekStatus {
         match row.status_type.as_str() {
             "Active" => Ok(WeekStatus::Active {
                 logical_delta: row.logical_delta.ok_or("Active status missing delta")? as usize,
-                rule_id: row.rule_id.ok_or("Active status missing rule_id")? as usize,
+                rule_id: row.rule_id.ok_or("Active status missing rule_id")?,
             }),
             "Skipped" => Ok(WeekStatus::Skipped),
             other => Err(format!("Unknown status type: {}", other)),
@@ -69,6 +70,66 @@ impl CalendarRepository {
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
+
+    pub async fn save_calendar(&self, manager: &ShiftCalendarManager) -> Result<(), String> {
+        let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
+
+        // 既存削除
+        sqlx::query("DELETE FROM shift_calendars WHERE plan_id = ?")
+            .bind(manager.plan_id)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+        // 親作成
+        let row_id = sqlx::query("INSERT INTO shift_calendars (plan_id, base_abs_week, initial_delta) VALUES (?, ?, ?)")
+            .bind(manager.plan_id)
+            .bind(manager.base_abs_week as i64)
+            .bind(manager.initial_delta as i64)
+            .execute(&mut *tx).await.map_err(|e| e.to_string())?
+            .last_insert_rowid();
+
+        // 子作成
+        for (index, status) in manager.timeline.iter().enumerate() {
+            let (st_type, delta, r_id) = match status {
+                WeekStatus::Active { logical_delta, rule_id } => ("Active", Some(*logical_delta as i64), Some(*rule_id)),
+                WeekStatus::Skipped => ("Skipped", None, None),
+            };
+
+            sqlx::query("INSERT INTO weekly_statuses (calendar_id, week_offset, status_type, logical_delta, rule_id) VALUES (?, ?, ?, ?, ?)")
+                .bind(row_id)
+                .bind(index as i64)
+                .bind(st_type)
+                .bind(delta)
+                .bind(r_id)
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        }
+
+        tx.commit().await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    pub async fn find_by_plan_id(&self, plan_id: i64) -> Result<Option<ShiftCalendarManager>, String> {
+        let header_opt: Option<CalendarHeaderRow> = sqlx::query_as::<Sqlite, CalendarHeaderRow>("SELECT id, plan_id, base_abs_week, initial_delta FROM shift_calendars WHERE plan_id = ? LIMIT 1")
+            .bind(plan_id).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+
+        let header = match header_opt {
+            Some(h) => h,
+            None => return Ok(None),
+        };
+
+        let rows: Vec<WeekStatusRow> = sqlx::query_as("SELECT week_offset, status_type, logical_delta, rule_id FROM weekly_statuses WHERE calendar_id = ? ORDER BY week_offset ASC")
+            .bind(header.id).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+
+        let timeline = rows.into_iter().map(|row| row.try_into()).collect::<Result<Vec<_>,_>>()?;
+
+        Ok(Some(ShiftCalendarManager {
+            id: Some(header.id),
+            plan_id: header.plan_id,
+            base_abs_week: header.base_abs_week as usize,
+            initial_delta: header.initial_delta as usize,
+            timeline,
+        }))
+    }
+
 
     /// 指定された範囲（offset start から count 分）のステータスだけを取得
     pub async fn fetch_status_range(

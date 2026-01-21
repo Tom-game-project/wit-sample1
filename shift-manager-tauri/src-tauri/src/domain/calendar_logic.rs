@@ -3,7 +3,7 @@ use crate::domain::shift_calendar_model::{
     ShiftCalendarManager, 
     WeekStatus,
     LogicalDelta,
-    RuleID,
+    RuleId,
 };
 
 use shift_calendar::shift_gen::{
@@ -107,7 +107,7 @@ impl ShiftCalendarManager {
     pub fn apply_weeks(
         &mut self,
         target_abs_week: AbsWeek,
-        skip_flags: &[(bool, RuleID)]
+        skip_flags: &[(bool, RuleId)]
     ) -> Result<(), AppendWeekErrorKind> {
 
         self.append_check(target_abs_week, skip_flags.iter().map(|(a, _)| *a))?; // チェックをする
@@ -146,7 +146,7 @@ impl ShiftCalendarManager {
     
     pub fn append_week(
         &mut self,
-        is_skipped: bool, rule_id: RuleID
+        is_skipped: bool, rule_id: RuleId
     ) {
         // 1. 次のdeltaを計算
         let next_delta = match self.timeline.last() {
@@ -200,7 +200,7 @@ impl ShiftCalendarManager {
     /// skipを使うことで週の途中からルールを開始することは可能なので対応しない
     pub fn derive_shift<'a>(
         &self,
-        rule_map: &HashMap<RuleID, WeekRuleTable<'a, Incomplete>>, // ID -> Rule
+        rule_map: &HashMap<RuleId, WeekRuleTable<'a, Incomplete>>, // ID -> Rule
         staff_group_list: &'a StaffGroupList,
         gen_week_abs: AbsWeek,  // 生成の始点となる絶対週
         gen_range: usize,       // 何週間分のシフトを作成するか
@@ -237,7 +237,7 @@ use std::collections::HashMap;
 /// - `staff_groups`: スタッフリスト (これはサイズが小さいので全件でもOKだが、最適化も可能)
 pub fn calculate_partial_shift<'a>(
     timeline_slice: &[WeekStatus],
-    rule_map: &HashMap<RuleID, WeekRuleTable<'a, Incomplete>>, // ID -> Rule
+    rule_map: &HashMap<RuleId, WeekRuleTable<'a, Incomplete>>, // ID -> Rule
     staff_group_list: &'a StaffGroupList,
 ) -> Vec<Option<WeekDecidedShift<'a>>> {
     timeline_slice

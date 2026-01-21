@@ -2,11 +2,12 @@ use serde::{Serialize, Deserialize};
 // 絶対週番号と論理デルタの型エイリアス
 pub type AbsWeek = usize;
 pub type LogicalDelta = usize;
-pub type RuleID = usize;
+pub type RuleId = i64;
+pub type PlanId = i64;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq)]
 pub enum WeekStatus {
-    Active { logical_delta: LogicalDelta, rule_id: RuleID },
+    Active { logical_delta: LogicalDelta, rule_id: RuleId },
     Skipped,
 }
 
@@ -20,6 +21,7 @@ pub struct ShiftCalendarManager {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub id: Option<i64>, 
     
+    pub plan_id: PlanId,
     pub base_abs_week: AbsWeek,
     pub initial_delta: LogicalDelta,
     pub timeline: Vec<WeekStatus>,

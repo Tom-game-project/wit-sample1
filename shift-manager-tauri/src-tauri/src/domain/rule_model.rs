@@ -64,14 +64,12 @@ pub struct PlanConfig {
 
 #[derive(Debug, Serialize)]
 pub struct StaffGroupWithMembers {
-    #[serde(flatten)]
     pub group: StaffGroup,
     pub members: Vec<StaffMember>,
 }
 
 #[derive(Debug, Serialize)]
 pub struct WeeklyRuleWithAssignments {
-    #[serde(flatten)]
     pub rule: WeeklyRule,
     pub assignments: Vec<RuleAssignment>,
 }

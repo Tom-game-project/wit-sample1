@@ -85,8 +85,11 @@ pub fn run() {
                     .await
                     .expect("failed to run migrations");
 
+                let services = AppServices::new(pool);
+
+                // ★ここで登録！
                 // --- State に登録 ---
-                app.manage(pool);
+                app.manage(services);
             });
 
             Ok(())
@@ -94,6 +97,24 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             greet,
+            application::commands::create_new_plan,
+            application::commands::list_all_plans,
+            application::commands::delete_plan,
+            application::commands::get_plan_config,
+            application::commands::add_staff_group,
+            application::commands::delete_staff_group,
+            application::commands::update_group_name,
+            application::commands::add_staff_member,
+            application::commands::delete_staff_member,
+            application::commands::update_member_name,
+            application::commands::add_weekly_rule,
+            application::commands::delete_weekly_rule,
+            application::commands::update_rule_name,
+            application::commands::add_rule_assignment,
+            application::commands::delete_assignment,
+            application::commands::save_calendar_state,
+            application::commands::get_calendar_state,
+            application::commands::derive_monthly_shift,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
