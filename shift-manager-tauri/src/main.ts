@@ -13,6 +13,31 @@ let currentConfig: PlanConfig | null = null;
 let currentYear = new Date().getFullYear();
 let currentMonth = new Date().getMonth();
 
+// ==========================================
+// UTILITIES
+// ==========================================
+
+// グループごとの色パレット
+const GROUP_COLORS = [
+    '#e67e22', // Orange (A)
+    '#27ae60', // Green (B)
+    '#2980b9', // Blue (C)
+    '#8e44ad', // Purple (D)
+    '#c0392b', // Red (E)
+    '#16a085', // Teal (F)
+    '#d35400', // Pumpkin (G)
+    '#2c3e50', // Midnight (H)
+];
+
+function getGroupColor(index: number): string {
+    return GROUP_COLORS[index % GROUP_COLORS.length];
+}
+
+function getGroupPrefix(index: number): string {
+    // 0 -> A, 1 -> B ...
+    return String.fromCharCode(65 + index);
+}
+
 /* ==========================================================================
    INIT & PLAN
    ========================================================================== */
@@ -85,45 +110,86 @@ function renderGroups(groups: StaffGroupWithMembers[]) {
     if (!container) return;
     container.innerHTML = '';
 
-    groups.forEach(g => {
+    groups.forEach((g, index) => {
+        // 自動割り当ての色とプレフィックスを取得
+        const color = getGroupColor(index);
+        const prefix = getGroupPrefix(index);
+
         const div = document.createElement('div');
         div.className = 'group-card';
-        div.style.border = '1px solid #ccc';
-        div.style.padding = '10px';
-        div.style.marginBottom = '10px';
+        // 見た目のスタイル調整
+        div.style.background = '#fff';
+        div.style.borderRadius = '6px';
+        div.style.boxShadow = '0 2px 5px rgba(0,0,0,0.05)';
+        div.style.marginBottom = '15px';
+        div.style.overflow = 'hidden';
+        // ★ 左側に色付きのラインを入れる
+        div.style.borderLeft = `5px solid ${color}`;
 
         div.innerHTML = `
-            <div style="display:flex; justify-content:space-between;">
-                <strong>${g.group.name}</strong>
+            <div style="padding: 10px; background: #f8f9fa; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="background:${color}; color:white; font-weight:bold; padding:2px 8px; border-radius:4px; font-size:0.9em;">
+                        ${prefix}
+                    </span>
+                    <strong>${g.group.name}</strong>
+                </div>
                 <div>
-                    <button class="btn-sm" onclick="window.updateGroupName(${g.group.id})">Edit</button>
+                    <button class="btn-sm btn-outline" onclick="window.updateGroupName(${g.group.id})">Rename</button>
                     <button class="btn-sm btn-danger" onclick="window.removeGroup(${g.group.id})">Del</button>
                 </div>
             </div>
-            <div class="members-list" style="margin-top:5px;"></div>
+            <div class="members-list" style="padding: 10px;"></div>
         `;
-        
+
         const list = div.querySelector('.members-list')!;
+
+        if (g.members.length === 0) {
+            list.innerHTML = '<div style="color:#aaa; font-size:0.9em; font-style:italic;">No members yet.</div>';
+        }
+
         g.members.forEach(m => {
             const mDiv = document.createElement('div');
+            mDiv.style.display = 'flex';
+            mDiv.style.justifyContent = 'space-between';
+            mDiv.style.alignItems = 'center';
+            mDiv.style.padding = '5px 0';
+            mDiv.style.borderBottom = '1px solid #f0f0f0';
+
             mDiv.innerHTML = `
-                <span>${m.sort_order}: ${m.name}</span>
-                <button class="btn-sm" onclick="window.removeMember(${m.id})">x</button>
+                <div style="display:flex; align-items:center; gap:5px;">
+                    <span style="color:#888; font-size:0.8em; width:20px;">#${m.sort_order}</span>
+                    <span>${m.name}</span>
+                </div>
+                <div>
+                    <button class="btn-sm btn-outline" style="font-size:0.7em; margin-right:5px;" onclick="window.updateMemberName(${m.id})">Edit</button>
+                    <button class="btn-sm btn-outline-danger" style="font-size:0.7em;" onclick="window.removeMember(${m.id})">x</button>
+                </div>
             `;
             list.appendChild(mDiv);
         });
 
+        // Footer (Add Button)
+        const footer = document.createElement('div');
+        footer.style.padding = '0 10px 10px 10px';
+
         const addBtn = document.createElement('button');
         addBtn.className = "btn-sm btn-outline";
+        addBtn.style.width = "100%";
+        addBtn.style.borderStyle = "dashed";
         addBtn.textContent = "+ Add Member";
         addBtn.onclick = () => addMember(g.group.id);
-        div.appendChild(addBtn);
+
+        footer.appendChild(addBtn);
+        div.appendChild(footer);
 
         container.appendChild(div);
     });
 }
 
 // Rules Logic
+// // renderRules関数内の、Assignments表示ループと追加ボタン部分を修正
+
 function renderRules(rules: WeeklyRuleWithAssignments[]) {
     const container = document.getElementById('rules-container');
     if (!container) return;
@@ -133,30 +199,174 @@ function renderRules(rules: WeeklyRuleWithAssignments[]) {
         const div = document.createElement('div');
         div.className = 'rule-card';
         div.style.border = '1px solid #ccc';
-        div.style.padding = '10px';
-        div.style.marginBottom = '10px';
+        div.style.padding = '15px';
+        div.style.marginBottom = '15px';
+        div.style.background = '#fff';
+        div.style.borderRadius = '8px';
 
         div.innerHTML = `
-            <div style="display:flex; justify-content:space-between;">
-                <strong>${r.rule.name}</strong>
-                <button class="btn-sm btn-danger" onclick="window.removeRule(${r.rule.id})">Del</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px;">
+                <strong style="font-size:1.1em;">${r.rule.name}</strong>
+                <div>
+                    <button class="btn-sm btn-outline" onclick="window.updateRuleName(${r.rule.id})">Edit</button>
+                    <button class="btn-sm btn-danger" onclick="window.removeRule(${r.rule.id})">Del</button>
+                </div>
             </div>
-            <div style="font-size:0.8em; margin-top:5px;">
-                Assignments: ${r.assignments.length}
+
+            <div class="assignments-grid" style="overflow-x:auto;">
+                <table style="width:100%; border-collapse: collapse; font-size:0.9em;">
+                    <thead>
+                        <tr style="background:#f9f9f9; text-align:left;">
+                            <th style="padding:5px;">Time</th>
+                            ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => `<th style="padding:5px;">${d}</th>`).join('')}
+                        </tr>
+                    </thead>
+                    <tbody id="rule-table-body-${r.rule.id}">
+                        </tbody>
+                </table>
             </div>
         `;
-        // TODO: アサインメントの追加・削除用モーダル連携はここに実装
-        const addAssignBtn = document.createElement('button');
-        addAssignBtn.textContent = "Add Assign (Dummy)";
-        addAssignBtn.onclick = () => {
-             // 実際はモーダルを開いて GroupとIndexを選択させる
-             addAssignment(r.rule.id, 0, 0, currentConfig!.groups[0].group.id, 0);
-        };
-        div.appendChild(addAssignBtn);
 
         container.appendChild(div);
+
+        // テーブルの中身を構築 (午前/午後)
+        const tbody = document.getElementById(`rule-table-body-${r.rule.id}`)!;
+        [0, 1].forEach(shiftTime => { // 0:Morning, 1:Afternoon
+            const tr = document.createElement('tr');
+            tr.style.borderTop = '1px solid #eee';
+
+            // 左端: 時間帯ラベル
+            const timeLabel = document.createElement('td');
+            timeLabel.textContent = shiftTime === 0 ? "AM" : "PM";
+            timeLabel.style.fontWeight = "bold";
+            timeLabel.style.padding = "5px";
+            tr.appendChild(timeLabel);
+
+            // 各曜日 (0..6)
+            for(let weekday=0; weekday<7; weekday++) {
+                const td = document.createElement('td');
+                td.style.padding = "5px";
+                td.style.verticalAlign = "top";
+
+                // このセルに該当するアサインメントを抽出
+                const assigns = r.assignments.filter(a => a.weekday === weekday && a.shift_time_type === shiftTime);
+
+                // チップを表示
+                assigns.forEach(a => {
+                    // グループ名やメンバー名を引きたい場合は currentConfig から検索
+                    // ここでは簡易的に ID-Index を表示しますが、本来は名前解決すべきです
+                    const group = currentConfig?.groups.find(g => g.group.id === a.target_group_id);
+                    const memberName = group?.members[a.target_member_index]?.name || "Unknown";
+                    const groupName = group?.group.name || "?";
+
+                    const chip = document.createElement('div');
+                    chip.style.background = '#e3f2fd';
+                    chip.style.color = '#0d47a1';
+                    chip.style.padding = '2px 6px';
+                    chip.style.borderRadius = '10px';
+                    chip.style.marginBottom = '2px';
+                    chip.style.fontSize = '0.8em';
+                    chip.style.cursor = 'pointer';
+                    chip.style.whiteSpace = 'nowrap';
+                    chip.textContent = `${memberName}`;
+                    chip.title = `${groupName}: ${memberName}`;
+                    chip.onclick = () => removeAssignment(a.id); // 削除機能
+                    td.appendChild(chip);
+                });
+
+                // 追加ボタン (+)
+                const addBtn = document.createElement('button');
+                addBtn.textContent = "+";
+                addBtn.className = "btn-sm btn-outline";
+                addBtn.style.fontSize = "0.7em";
+                addBtn.style.display = "block";
+                addBtn.style.margin = "5px auto 0";
+                addBtn.onclick = () => openAssignmentModal(r.rule.id, weekday, shiftTime);
+                td.appendChild(addBtn);
+
+                tr.appendChild(td);
+            }
+            tbody.appendChild(tr);
+        });
     });
 }
+
+
+function openAssignmentModal(ruleId: number, weekday: number, shiftTime: number) {
+    if (!currentConfig) return;
+
+    const modal = document.getElementById('modal');
+    const modalBody = document.getElementById('modal-body');
+    const modalTitle = document.getElementById('modal-title');
+
+    if (!modal || !modalBody || !modalTitle) return;
+
+    // タイトル設定
+    const dayName = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][weekday];
+    const timeName = shiftTime === 0 ? "Morning" : "Afternoon";
+    modalTitle.textContent = `Assign to ${dayName} - ${timeName}`
+
+    // コンテンツ生成
+    modalBody.innerHTML = '';
+
+    if (currentConfig.groups.length === 0) {
+        modalBody.innerHTML = '<p>No staff groups defined yet.</p>';
+    }
+
+    currentConfig.groups.forEach(g => {
+        const groupDiv = document.createElement('div');
+        groupDiv.style.marginBottom = '15px';
+
+        const header = document.createElement('div');
+        header.style.fontWeight = 'bold';
+        header.style.color = '#555';
+        header.style.borderBottom = '1px solid #eee';
+        header.style.marginBottom = '5px';
+        header.textContent = g.group.name;
+        groupDiv.appendChild(header);
+
+        const grid = document.createElement('div');
+        grid.style.display = 'grid';
+        grid.style.gridTemplateColumns = 'repeat(auto-fill, minmax(100px, 1fr))';
+        grid.style.gap = '8px';
+
+        // メンバー一覧ボタン
+        g.members.forEach((m, index) => {
+            const btn = document.createElement('button');
+            btn.className = 'btn btn-outline-light'; // 既存スタイル活用
+            btn.style.color = '#333';
+            btn.style.border = '1px solid #ccc';
+            btn.style.padding = '8px';
+            btn.style.textAlign = 'center';
+            btn.style.cursor = 'pointer';
+            btn.textContent = m.name;
+
+            btn.onclick = async () => {
+                // アサイン実行
+                // Rust側は member_index (配列のインデックス) を期待している
+                // sort_order と index が一致している前提であれば index を渡す
+                // 厳密には m.sort_order を使うべきか、配列の index かはRust側のロジック依存ですが
+                // ここでは配列の index を渡します
+                await addAssignment(ruleId, weekday, shiftTime, g.group.id, index);
+                closeModal();
+            };
+
+            grid.appendChild(btn);
+        });
+
+        groupDiv.appendChild(grid);
+        modalBody.appendChild(groupDiv);
+    });
+
+    // 表示
+    modal.style.display = 'flex';
+}
+
+function closeModal() {
+    const modal = document.getElementById('modal');
+    if (modal) modal.style.display = 'none';
+}
+
 
 // Actions
 async function addNewGroup() {
@@ -170,31 +380,53 @@ async function removeGroup(groupId: number) {
     await invoke("delete_staff_group", { groupId });
     reloadConfig();
 }
+
 async function updateGroupName(groupId: number) {
     const name = prompt("New name:");
     if(name) { await invoke("update_group_name", { groupId, name }); reloadConfig(); }
 }
+
 async function addMember(groupId: number) {
     await invoke("add_staff_member", { groupId, name: "New Member" });
     reloadConfig();
 }
+
 async function removeMember(memberId: number) {
     await invoke("delete_staff_member", { memberId });
     reloadConfig();
 }
+
 async function addNewRule() {
     if (!currentPlanId) return;
     await invoke("add_weekly_rule", { planId: currentPlanId, name: "New Rule" });
     reloadConfig();
 }
+
 async function removeRule(ruleId: number) {
     if(!confirm("Delete rule?")) return;
     await invoke("delete_weekly_rule", { ruleId });
     reloadConfig();
 }
+
 async function addAssignment(ruleId: number, weekday: number, shiftTime: number, groupId: number, memberIndex: number) {
     await invoke("add_rule_assignment", { ruleId, weekday, shiftTime, groupId, memberIndex });
     reloadConfig();
+}
+
+async function removeAssignment(assignmentId: number) {
+    // 誤操作防止の確認
+    // if (!confirm("Remove this assignment?")) return; // 確認が煩わしい場合はコメントアウトしてください
+
+    try {
+        // Rustコマンド呼び出し
+        await invoke("delete_assignment", { assignmentId });
+        
+        // 画面更新
+        await reloadConfig();
+    } catch (e) {
+        console.error("Failed to remove assignment:", e);
+        alert(`Failed to remove assignment: ${e}`);
+    }
 }
 
 /* ==========================================================================
@@ -272,6 +504,8 @@ function calculateCalendarDates(year: number, month: number) {
     return weeks;
 }
 
+
+
 function setupEventListeners() {
     // 1. プラン選択 (Plan Select)
     const planSelect = document.getElementById('plan-select');
@@ -342,6 +576,11 @@ function setupEventListeners() {
 
     // Generate Button
     // document.getElementById('generate-btn')?.addEventListener('click', handleGenerate);
+    //
+    document.getElementById('modal-cancel-btn')?.addEventListener('click', closeModal);
+    document.getElementById('modal')?.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).id === 'modal') closeModal();
+    });
 }
 
 // Global Exports for onclick
@@ -349,3 +588,5 @@ function setupEventListeners() {
 (window as any).updateGroupName = updateGroupName;
 (window as any).removeMember = removeMember;
 (window as any).removeRule = removeRule;
+
+(window as any).removeAssignment = removeAssignment;
