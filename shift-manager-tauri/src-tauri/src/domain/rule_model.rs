@@ -42,7 +42,7 @@ pub struct WeeklyRule {
 
 // --- 5. Rule Assignment (Holl) ---
 #[derive(Debug, Serialize, FromRow, Clone)]
-#[serde(rename_all = "camelCase")] // JS側は camelCase が一般的
+// #[serde(rename_all = "camelCase")] // JS側は camelCase が一般的
 pub struct RuleAssignment {
     pub id: i64,
     pub weekly_rule_id: i64,
@@ -55,7 +55,7 @@ pub struct RuleAssignment {
 // --- 複合データ (フロントエンドに一括で返す用) ---
 // Planを選択したときに、紐づく設定を全部まとめて返すための構造体
 #[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
+// #[serde(rename_all = "camelCase")]
 pub struct PlanConfig {
     pub plan: Plan,
     pub groups: Vec<StaffGroupWithMembers>,

@@ -189,13 +189,12 @@ function renderGroups(groups: StaffGroupWithMembers[]) {
 
 // Rules Logic
 // // renderRules関数内の、Assignments表示ループと追加ボタン部分を修正
-
 function renderRules(rules: WeeklyRuleWithAssignments[]) {
     const container = document.getElementById('rules-container');
     if (!container) return;
     container.innerHTML = '';
 
-    rules.forEach(r => {
+    rules.forEach((r, rIdx) => {
         const div = document.createElement('div');
         div.className = 'rule-card';
         div.style.border = '1px solid #ccc';
@@ -206,81 +205,107 @@ function renderRules(rules: WeeklyRuleWithAssignments[]) {
 
         div.innerHTML = `
             <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:10px;">
-                <strong style="font-size:1.1em;">${r.rule.name}</strong>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="background:#333; color:white; padding:2px 6px; border-radius:4px; font-size:0.8em;">#${rIdx + 1}</span>
+                    <strong style="font-size:1.1em;">${r.rule.name}</strong>
+                </div>
                 <div>
-                    <button class="btn-sm btn-outline" onclick="window.updateRuleName(${r.rule.id})">Edit</button>
+                    <button class="btn-sm btn-outline" onclick="window.updateRuleName(${r.rule.id})">Rename</button>
                     <button class="btn-sm btn-danger" onclick="window.removeRule(${r.rule.id})">Del</button>
                 </div>
             </div>
-
+            
             <div class="assignments-grid" style="overflow-x:auto;">
                 <table style="width:100%; border-collapse: collapse; font-size:0.9em;">
                     <thead>
-                        <tr style="background:#f9f9f9; text-align:left;">
-                            <th style="padding:5px;">Time</th>
-                            ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => `<th style="padding:5px;">${d}</th>`).join('')}
+                        <tr style="background:#f9f9f9; text-align:left; border-bottom:2px solid #eee;">
+                            <th style="padding:8px;">Time</th>
+                            ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d => `<th style="padding:8px; min-width:80px;">${d}</th>`).join('')}
                         </tr>
                     </thead>
-                    <tbody id="rule-table-body-${r.rule.id}">
-                        </tbody>
+                    <tbody id="rule-table-body-${r.rule.id}"></tbody>
                 </table>
             </div>
         `;
-
+        
         container.appendChild(div);
 
-        // テーブルの中身を構築 (午前/午後)
         const tbody = document.getElementById(`rule-table-body-${r.rule.id}`)!;
-        [0, 1].forEach(shiftTime => { // 0:Morning, 1:Afternoon
+        [0, 1].forEach(shiftTime => {
             const tr = document.createElement('tr');
             tr.style.borderTop = '1px solid #eee';
-
-            // 左端: 時間帯ラベル
+            
             const timeLabel = document.createElement('td');
             timeLabel.textContent = shiftTime === 0 ? "AM" : "PM";
             timeLabel.style.fontWeight = "bold";
-            timeLabel.style.padding = "5px";
+            timeLabel.style.padding = "8px";
+            timeLabel.style.color = shiftTime === 0 ? "#e67e22" : "#2980b9";
             tr.appendChild(timeLabel);
 
-            // 各曜日 (0..6)
             for(let weekday=0; weekday<7; weekday++) {
                 const td = document.createElement('td');
                 td.style.padding = "5px";
                 td.style.verticalAlign = "top";
+                td.style.borderLeft = "1px solid #f5f5f5";
 
                 // このセルに該当するアサインメントを抽出
                 const assigns = r.assignments.filter(a => a.weekday === weekday && a.shift_time_type === shiftTime);
-
-                // チップを表示
+                
                 assigns.forEach(a => {
-                    // グループ名やメンバー名を引きたい場合は currentConfig から検索
-                    // ここでは簡易的に ID-Index を表示しますが、本来は名前解決すべきです
-                    const group = currentConfig?.groups.find(g => g.group.id === a.target_group_id);
-                    const memberName = group?.members[a.target_member_index]?.name || "Unknown";
-                    const groupName = group?.group.name || "?";
+                    // グループ情報を検索して色やプレフィックスを決定
+                    const groupIndex = currentConfig?.groups.findIndex(g => g.group.id === a.target_group_id) ?? -1;
+                    const groupData = groupIndex >= 0 ? currentConfig!.groups[groupIndex] : null;
+                    
+                    const color = groupIndex >= 0 ? getGroupColor(groupIndex) : '#999';
+                    const prefix = groupIndex >= 0 ? getGroupPrefix(groupIndex) : '?';
+                    
+                    // ツールチップ用に本来の名前を取得
+                    const memberName = groupData?.members[a.target_member_index]?.name || "Unknown";
 
+                    // ★ 色付きチップの生成
                     const chip = document.createElement('div');
-                    chip.style.background = '#e3f2fd';
-                    chip.style.color = '#0d47a1';
+                    
+                    // スタイル設定: 左端を太い色線にするデザイン
+                    chip.style.border = `1px solid ${color}`;
+                    chip.style.borderLeft = `5px solid ${color}`; 
+                    chip.style.background = '#fcfcfc';
+                    chip.style.color = '#333';
                     chip.style.padding = '2px 6px';
-                    chip.style.borderRadius = '10px';
-                    chip.style.marginBottom = '2px';
-                    chip.style.fontSize = '0.8em';
+                    chip.style.borderRadius = '3px';
+                    chip.style.marginBottom = '4px';
+                    chip.style.fontSize = '0.9em'; // 少し大きく
+                    chip.style.fontWeight = 'bold';
                     chip.style.cursor = 'pointer';
                     chip.style.whiteSpace = 'nowrap';
-                    chip.textContent = `${memberName}`;
-                    chip.title = `${groupName}: ${memberName}`;
-                    chip.onclick = () => removeAssignment(a.id); // 削除機能
+                    chip.style.boxShadow = '0 1px 2px rgba(0,0,0,0.1)';
+                    chip.style.display = 'inline-block';
+                    chip.style.marginRight = '4px';
+                    
+                    // ★ 表示内容: "A-0" のような形式
+                    chip.textContent = `${prefix}-${a.target_member_index}`;
+                    
+                    // ホバー時に詳細（グループ名: 名前）を表示
+                    chip.title = `${groupData?.group.name || 'Unknown'}: ${memberName}`;
+                    
+                    // クリックで削除
+                    chip.onclick = (e) => {
+                        e.stopPropagation();
+                        if(confirm(`Remove assignment ${prefix}-${a.target_member_index} (${memberName})?`)) {
+                            removeAssignment(a.id);
+                        }
+                    };
                     td.appendChild(chip);
                 });
 
                 // 追加ボタン (+)
                 const addBtn = document.createElement('button');
                 addBtn.textContent = "+";
-                addBtn.className = "btn-sm btn-outline";
+                addBtn.className = "btn-sm btn-outline-light";
+                addBtn.style.color = "#ccc";
                 addBtn.style.fontSize = "0.7em";
                 addBtn.style.display = "block";
-                addBtn.style.margin = "5px auto 0";
+                addBtn.style.width = "100%";
+                addBtn.style.marginTop = "5px";
                 addBtn.onclick = () => openAssignmentModal(r.rule.id, weekday, shiftTime);
                 td.appendChild(addBtn);
 
@@ -313,16 +338,26 @@ function openAssignmentModal(ruleId: number, weekday: number, shiftTime: number)
         modalBody.innerHTML = '<p>No staff groups defined yet.</p>';
     }
 
-    currentConfig.groups.forEach(g => {
+    // ★修正: indexを受け取るように変更
+    currentConfig.groups.forEach((g, index) => {
+        // ★追加: 色とプレフィックスを取得
+        const color = getGroupColor(index);
+        const prefix = getGroupPrefix(index);
+
         const groupDiv = document.createElement('div');
         groupDiv.style.marginBottom = '15px';
 
         const header = document.createElement('div');
         header.style.fontWeight = 'bold';
-        header.style.color = '#555';
-        header.style.borderBottom = '1px solid #eee';
+        
+        // ★修正: 色を適用
+        header.style.color = color; 
+        header.style.borderBottom = `2px solid ${color}`; // ボーダーも色付きに
         header.style.marginBottom = '5px';
-        header.textContent = g.group.name;
+        
+        // ★修正: プレフィックスと名前を表示
+        header.innerHTML = `<span style="font-weight:900; margin-right:5px;">${prefix}</span> ${g.group.name}`;
+        
         groupDiv.appendChild(header);
 
         const grid = document.createElement('div');
@@ -331,23 +366,23 @@ function openAssignmentModal(ruleId: number, weekday: number, shiftTime: number)
         grid.style.gap = '8px';
 
         // メンバー一覧ボタン
-        g.members.forEach((m, index) => {
+        g.members.forEach((m, mIndex) => { // 変数名を mIndex に変更
             const btn = document.createElement('button');
-            btn.className = 'btn btn-outline-light'; // 既存スタイル活用
+            btn.className = 'btn btn-outline-light';
             btn.style.color = '#333';
-            btn.style.border = '1px solid #ccc';
+            
+            // ★修正: 左端に色付きのボーダーを追加して視認性を向上
+            btn.style.border = '1px solid #ddd';
+            btn.style.borderLeft = `4px solid ${color}`;
+
             btn.style.padding = '8px';
             btn.style.textAlign = 'center';
             btn.style.cursor = 'pointer';
-            btn.textContent = m.name;
+            btn.textContent = `#${mIndex + 1}`;
 
             btn.onclick = async () => {
                 // アサイン実行
-                // Rust側は member_index (配列のインデックス) を期待している
-                // sort_order と index が一致している前提であれば index を渡す
-                // 厳密には m.sort_order を使うべきか、配列の index かはRust側のロジック依存ですが
-                // ここでは配列の index を渡します
-                await addAssignment(ruleId, weekday, shiftTime, g.group.id, index);
+                await addAssignment(ruleId, weekday, shiftTime, g.group.id, mIndex);
                 closeModal();
             };
 
@@ -426,6 +461,22 @@ async function removeAssignment(assignmentId: number) {
     } catch (e) {
         console.error("Failed to remove assignment:", e);
         alert(`Failed to remove assignment: ${e}`);
+    }
+}
+
+async function updateMemberName(memberId: number) {
+    // 現在の名前を取得できれば良いですが、今回は単純に空欄プロンプトから始めます
+    // (UX向上のため、本来は現在の名前を初期値に入れたいところですが、
+    //  memberIdから逆引きするのが少し手間なので省略します。必要ならfindしてください)
+    
+    const newName = prompt("Enter new name:");
+    if (newName && newName.trim() !== "") {
+        try {
+            await invoke("update_member_name", { memberId, name: newName.trim() });
+            await reloadConfig();
+        } catch (e) {
+            alert(`Failed to update member name: ${e}`);
+        }
     }
 }
 
@@ -590,3 +641,4 @@ function setupEventListeners() {
 (window as any).removeRule = removeRule;
 
 (window as any).removeAssignment = removeAssignment;
+(window as any).updateMemberName = updateMemberName;
