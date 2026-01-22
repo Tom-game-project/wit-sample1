@@ -3,11 +3,16 @@ use sqlx::{
     SqlitePool,
     Sqlite,
     FromRow,
+    Row,
 };
 
 use crate::domain::{
     rule_model::{WeeklyRule, RuleAssignment},
-    shift_calendar_model::*
+    shift_calendar_model::{
+        WeekStatus,
+        PlanId,
+        ShiftCalendarManager
+    }
 };
 
 pub struct CalendarRepository {
@@ -71,6 +76,96 @@ impl CalendarRepository {
         Self { pool }
     }
 
+    /// タイムラインを保存（追記）する
+    /// 1件ずつ順番にチェックし、未保存の続きデータであればINSERTする
+    pub async fn save_timeline(
+        &self,
+        plan_id: i64,
+        base_abs_week: usize,
+        initial_delta: usize,
+        timeline: &[WeekStatus], // Managerではなく、データ配列そのものを受け取る
+    ) -> Result<(), String> {
+
+        let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
+
+        // 1. 親カレンダーIDの取得 (なければ作成)
+        //    ここもシンプルに「SELECTしてなければINSERT」の流れにします
+        let calendar_id_opt: Option<i64> = sqlx::query("SELECT id FROM shift_calendars WHERE plan_id = ?")
+            .bind(plan_id)
+            .fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?
+            .map(|row| row.get("id"));
+
+        let calendar_id = if let Some(id) = calendar_id_opt {
+            id
+        } else {
+            let new_id = sqlx::query("
+                INSERT INTO shift_calendars (plan_id, base_abs_week, initial_delta) 
+                VALUES (?, ?, ?)")
+                .bind(plan_id)
+                .bind(base_abs_week as i64)
+                .bind(initial_delta as i64)
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?
+                .last_insert_rowid();
+            new_id
+        };
+
+        // 2. 現在のDB上の「到達点（最大オフセット）」を取得
+        let row = sqlx::query("SELECT MAX(week_offset) as max_offset FROM weekly_statuses WHERE calendar_id = ?")
+            .bind(calendar_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        // ★修正: 明示的に Option<i64> として取得することで、NULLを確実にハンドリングする
+        // try_get("max_offset") で i64 を指定すると、環境によっては NULL が 0 になる恐れがあるため
+        let max_offset_opt: Option<i64> = row.try_get("max_offset").unwrap_or(None);
+
+        // NULL(None)なら -1、値があればその値を使う
+        let mut current_db_cursor: i64 = max_offset_opt.unwrap_or(-1);
+
+        // 3. ループ処理: 1件ずつチェックしてINSERT
+        for (index, status) in timeline.iter().enumerate() {
+            let target_offset = index as i64;
+
+            // 判定: DBのカーソルより先にあるデータだけを入れる
+            // 例: DBに0,1,2がある(cursor=2)。targetが3なら入れる。targetが2なら無視。
+            if target_offset > current_db_cursor {
+                // INSERT実行
+                let (st_type, delta, r_id) = match status {
+                    WeekStatus::Active { logical_delta, rule_id } =>
+                        ("Active", Some(*logical_delta as i64), Some(*rule_id)),
+                    WeekStatus::Skipped =>
+                        ("Skipped", None, None),
+                };
+
+                sqlx::query(
+                    "INSERT INTO weekly_statuses (
+                        calendar_id, 
+                        week_offset, 
+                        status_type, 
+                        logical_delta,
+                        rule_id)
+                    VALUES (?, ?, ?, ?, ?)"
+                )
+                .bind(calendar_id /* calendar_id */)
+                .bind(target_offset/* week_offset */)
+                .bind(st_type/* status_type */)
+                .bind(delta /* logical_delta */)
+                .bind(r_id /* rule_id */)
+                .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+
+                // カーソルを進める（これにより、次のループでの連続性が保証される）
+                current_db_cursor = target_offset;
+            } else {
+                // すでにDBにあるので無視 (上書き防止)
+                // continue;
+            }
+        }
+
+        tx.commit().await.map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
     pub async fn save_calendar(&self, manager: &ShiftCalendarManager) -> Result<(), String> {
         let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
 
@@ -80,7 +175,12 @@ impl CalendarRepository {
             .execute(&mut *tx).await.map_err(|e| e.to_string())?;
 
         // 親作成
-        let row_id = sqlx::query("INSERT INTO shift_calendars (plan_id, base_abs_week, initial_delta) VALUES (?, ?, ?)")
+        let row_id = sqlx::query("
+            INSERT INTO shift_calendars (
+                plan_id,
+                base_abs_week,
+                initial_delta)
+            VALUES (?, ?, ?)")
             .bind(manager.plan_id)
             .bind(manager.base_abs_week as i64)
             .bind(manager.initial_delta as i64)
@@ -94,7 +194,15 @@ impl CalendarRepository {
                 WeekStatus::Skipped => ("Skipped", None, None),
             };
 
-            sqlx::query("INSERT INTO weekly_statuses (calendar_id, week_offset, status_type, logical_delta, rule_id) VALUES (?, ?, ?, ?, ?)")
+            sqlx::query("
+                INSERT INTO weekly_statuses (
+                    calendar_id,
+                    week_offset,
+                    status_type,
+                    logical_delta,
+                    rule_id
+                )
+                VALUES (?, ?, ?, ?, ?)")
                 .bind(row_id)
                 .bind(index as i64)
                 .bind(st_type)
@@ -108,16 +216,29 @@ impl CalendarRepository {
     }
 
     pub async fn find_by_plan_id(&self, plan_id: i64) -> Result<Option<ShiftCalendarManager>, String> {
-        let header_opt: Option<CalendarHeaderRow> = sqlx::query_as::<Sqlite, CalendarHeaderRow>("SELECT id, plan_id, base_abs_week, initial_delta FROM shift_calendars WHERE plan_id = ? LIMIT 1")
-            .bind(plan_id).fetch_optional(&self.pool).await.map_err(|e| e.to_string())?;
+        let header_opt: Option<CalendarHeaderRow> = sqlx::query_as::<Sqlite, CalendarHeaderRow>("
+            SELECT id, plan_id, base_abs_week, initial_delta 
+            FROM shift_calendars 
+            WHERE plan_id = ? LIMIT 1")
+            .bind(plan_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| e.to_string())?;
 
         let header = match header_opt {
             Some(h) => h,
             None => return Ok(None),
         };
 
-        let rows: Vec<WeekStatusRow> = sqlx::query_as("SELECT week_offset, status_type, logical_delta, rule_id FROM weekly_statuses WHERE calendar_id = ? ORDER BY week_offset ASC")
-            .bind(header.id).fetch_all(&self.pool).await.map_err(|e| e.to_string())?;
+        let rows: Vec<WeekStatusRow> = sqlx::query_as("
+            SELECT week_offset, status_type, logical_delta, rule_id 
+            FROM weekly_statuses 
+            WHERE calendar_id = ?
+            ORDER BY week_offset ASC")
+            .bind(header.id)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(|e| e.to_string())?;
 
         let timeline = rows.into_iter().map(|row| row.try_into()).collect::<Result<Vec<_>,_>>()?;
 
@@ -129,7 +250,6 @@ impl CalendarRepository {
             timeline,
         }))
     }
-
 
     /// 指定された範囲（offset start から count 分）のステータスだけを取得
     pub async fn fetch_status_range(
@@ -199,7 +319,13 @@ impl CalendarRepository {
         // 同じ rule_ids を使って、関連する Assignment も一度に取ってくる
 
         let mut assign_builder: QueryBuilder<Sqlite> = QueryBuilder::new(
-            "SELECT id, weekly_rule_id, weekday, shift_time_type, target_group_id, target_member_index
+            "SELECT 
+                id,
+                weekly_rule_id,
+                weekday,
+                shift_time_type,
+                target_group_id,
+                target_member_index
              FROM rule_assignments
              WHERE weekly_rule_id IN ("
         );
@@ -244,174 +370,3 @@ impl CalendarRepository {
     }
 }
 
-// calendar の操作は簡単にユーザーが月指定でできるように実装する
-//
-
-#[cfg(test)]
-mod calendar_repo_tests {
-    use super::*;
-    use sqlx::sqlite::SqlitePoolOptions;
-    use crate::domain::shift_calendar_model::WeekStatus;
-
-    // 1. テスト用セットアップ
-    async fn setup_test_db() -> SqlitePool {
-        let pool = SqlitePoolOptions::new()
-            .connect("sqlite::memory:")
-            .await
-            .expect("Failed to create memory pool");
-
-        // ★ staff_groups テーブルを追加
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await
-            .expect("Failed to create schema");
-
-        pool
-    }
-
-    // 2. ヘルパー関数
-
-    async fn create_plan(pool: &SqlitePool, name: &str) -> i64 {
-        sqlx::query("INSERT INTO plans (name) VALUES (?)")
-            .bind(name)
-            .execute(pool)
-            .await
-            .unwrap()
-            .last_insert_rowid()
-    }
-
-    // ★ 追加: グループ作成ヘルパー
-    async fn create_group(pool: &SqlitePool, plan_id: i64, name: &str) -> i64 {
-        sqlx::query("INSERT INTO staff_groups (plan_id, name, sort_order) VALUES (?, ?, 0)")
-            .bind(plan_id)
-            .bind(name)
-            .execute(pool)
-            .await
-            .unwrap()
-            .last_insert_rowid()
-    }
-
-    async fn create_rule(pool: &SqlitePool, plan_id: i64, name: &str) -> i64 {
-        sqlx::query("INSERT INTO weekly_rules (plan_id, name, sort_order) VALUES (?, ?, 0)")
-            .bind(plan_id)
-            .bind(name)
-            .execute(pool)
-            .await
-            .unwrap()
-            .last_insert_rowid()
-    }
-
-    // ★ 修正: group_id を引数で受け取る
-    async fn create_assignment(pool: &SqlitePool, rule_id: i64, weekday: i64, group_id: i64) {
-        sqlx::query(
-            "INSERT INTO rule_assignments 
-            (weekly_rule_id, weekday, shift_time_type, target_group_id, target_member_index) 
-            VALUES (?, ?, 0, ?, 0)"
-        )
-        .bind(rule_id)
-        .bind(weekday)
-        .bind(group_id) // ★ ここに渡す
-        .execute(pool)
-        .await
-        .unwrap();
-    }
-
-    // ... (create_calendar, create_status は変更なし) ...
-    async fn create_calendar(pool: &SqlitePool, plan_id: i64) -> i64 {
-        sqlx::query("INSERT INTO shift_calendars (plan_id, base_abs_week, initial_delta) VALUES (?, 100, 0)")
-            .bind(plan_id)
-            .execute(pool)
-            .await
-            .unwrap()
-            .last_insert_rowid()
-    }
-
-    async fn create_status(pool: &SqlitePool, cal_id: i64, offset: i64, status: &str, delta: Option<i64>, rule_id: Option<i64>) {
-        sqlx::query(
-            "INSERT INTO weekly_statuses (calendar_id, week_offset, status_type, logical_delta, rule_id) 
-             VALUES (?, ?, ?, ?, ?)"
-        )
-        .bind(cal_id)
-        .bind(offset)
-        .bind(status)
-        .bind(delta)
-        .bind(rule_id)
-        .execute(pool)
-        .await
-        .unwrap();
-    }
-
-    // 3. テストケース修正
-
-    #[tokio::test]
-    async fn test_fetch_rules_by_ids() {
-        let pool = setup_test_db().await;
-        let repo = CalendarRepository::new(pool.clone());
-
-        let plan_id = create_plan(&pool, "Test Plan").await;
-        
-        // ★ ここでダミーグループを作成
-        let group_id = create_group(&pool, plan_id, "Group A").await;
-        
-        // Rule A
-        let rule_a_id = create_rule(&pool, plan_id, "Rule A").await;
-        create_assignment(&pool, rule_a_id, 0, group_id).await; // Mon
-        create_assignment(&pool, rule_a_id, 1, group_id).await; // Tue
-
-        // Rule B
-        let rule_b_id = create_rule(&pool, plan_id, "Rule B").await;
-        create_assignment(&pool, rule_b_id, 5, group_id).await; // Sat
-
-        // Rule C
-        let rule_c_id = create_rule(&pool, plan_id, "Rule C").await;
-        create_assignment(&pool, rule_c_id, 6, group_id).await; 
-
-        // [Act]
-        let results = repo.fetch_rules_by_ids(&[rule_a_id, rule_b_id]).await.expect("Failed to fetch");
-
-        // [Assert]
-        assert_eq!(results.len(), 2);
-
-        let res_a = results.iter().find(|r| r.rule.id == rule_a_id).expect("Rule A missing");
-        assert_eq!(res_a.rule.name, "Rule A");
-        assert_eq!(res_a.assignments.len(), 2);
-
-        let res_b = results.iter().find(|r| r.rule.id == rule_b_id).expect("Rule B missing");
-        assert_eq!(res_b.assignments.len(), 1);
-
-        assert!(results.iter().find(|r| r.rule.id == rule_c_id).is_none());
-    }
-
-    #[tokio::test]
-    async fn test_fetch_status_range() {
-        // [Setup]
-        let pool = setup_test_db().await;
-        let repo = CalendarRepository::new(pool.clone());
-
-        let plan_id = create_plan(&pool, "Plan").await;
-        let cal_id = create_calendar(&pool, plan_id).await;
-        let rule_id = create_rule(&pool, plan_id, "Rule").await;
-
-        // DBにデータを投入 (0〜4週目)
-        create_status(&pool, cal_id, 0, "Active", Some(10), Some(rule_id)).await;
-        create_status(&pool, cal_id, 1, "Skipped", None, None).await;
-        create_status(&pool, cal_id, 2, "Active", Some(11), Some(rule_id)).await;
-        create_status(&pool, cal_id, 3, "Skipped", None, None).await;
-        create_status(&pool, cal_id, 4, "Active", Some(12), Some(rule_id)).await;
-
-        // [Act] Offset 1 から 3つ分 (1, 2, 3) を取得
-        let results = repo.fetch_status_range(cal_id, 1, 3).await.expect("Failed to fetch range");
-
-        // [Assert]
-        assert_eq!(results.len(), 3);
-        assert!(matches!(results[0], WeekStatus::Skipped));
-        match &results[1] {
-            WeekStatus::Active { logical_delta, rule_id: r_id } => {
-                assert_eq!(*logical_delta, 11);
-                assert_eq!(*r_id as i64, rule_id);
-            },
-            _ => panic!("Expected Active for offset 2"),
-        }
-        assert!(matches!(results[2], WeekStatus::Skipped));
-    }
-}

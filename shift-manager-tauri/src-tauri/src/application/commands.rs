@@ -104,6 +104,7 @@ pub async fn derive_monthly_shift(
 ) -> Result<MonthlyShiftResult, String> {
     // 1. カレンダーManager（タイムライン）を取得
     let manager_opt = repo.calendar.find_by_plan_id(plan_id).await?;
+
     // let manager = match manager_opt {
     //     Some(m) => m,
     //     None => return Ok(MonthlyShiftResult { weeks: vec![] }), // データなし
@@ -134,7 +135,7 @@ pub async fn derive_monthly_shift(
     // 簡易計算: (ターゲット年月 - 基準日) / 7日 で絶対週を出すロジックが必要
     // 今回はデモとして「managerの先頭から表示する」あるいは「start_week_abs」を計算して渡します。
     // let start_week_abs =  calculate_abs_week(target_year, target_month, manager.base_abs_week);
-    let start_week_abs =1;
+    let start_week_abs = 1;
     let range = 6; // カレンダーは最大6週表示
 
     // 4. ロジック実行！ (ユーザー様の自作関数)

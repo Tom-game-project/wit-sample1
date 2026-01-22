@@ -5,7 +5,7 @@ pub type LogicalDelta = usize;
 pub type RuleId = i64;
 pub type PlanId = i64;
 
-#[derive(Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Clone)]
 pub enum WeekStatus {
     Active { logical_delta: LogicalDelta, rule_id: RuleId },
     Skipped,

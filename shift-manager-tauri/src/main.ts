@@ -488,10 +488,64 @@ async function updateMemberName(memberId: number) {
     }
 }
 
+// Generateボタン: UI上のスキップ設定を集めてバックエンドへ送る
+async function handleGenerate() {
+    if (!currentPlanId) {
+        alert("Please select a plan first.");
+        return;
+    }
+
+    // 1. UI上の全スイッチの状態を収集する
+    //    pendingSkips だけだと「変更していないスイッチ」が漏れる可能性があるため、
+    //    DOM要素(checkbox)から直接「今の見た目通り」の状態を取得するのが最も確実です。
+    
+    const mount = document.getElementById('calendar-mount');
+    if (!mount) return;
+
+    const checkboxes = mount.querySelectorAll('input[type="checkbox"]');
+    const skipFlags: boolean[] = [];
+    
+    // NodeListを配列に変換して処理
+    checkboxes.forEach((cb) => {
+        // disableされている(FIXED)週は、生成対象外とみなすか、
+        // あるいは「上書き生成」の実装方針によります。
+        // ★今回の実装方針: 「FIXEDより後の週（Pending）」のみを対象として送る
+        const input = cb as HTMLInputElement;
+        
+        if (!input.disabled) {
+            skipFlags.push(input.checked);
+        }
+    });
+
+    if (skipFlags.length === 0) {
+        alert("No new (pending) weeks to generate.");
+        return;
+    }
+
+    console.log("Sending skips to Rust:", skipFlags);
+
+    try {
+        // 2. Rustコマンド呼び出し
+        await invoke("generate_and_save_shift", { 
+            planId: currentPlanId, 
+            skips: skipFlags 
+        });
+        
+        // 3. 成功したらローカルのpending状態をクリアして再描画
+        pendingSkips = {}; // クリア
+        await renderCalendarView(); // 最新の保存状態(FIXED)として再描画されるはず
+        
+        alert("Schedule Generated & Saved!");
+        
+    } catch (e) {
+        console.error(e);
+        alert(`Generate failed: ${e}`);
+    }
+}
+
 /* ==========================================================================
    CALENDAR VIEW
    ========================================================================== */
-
 
 async function renderCalendarView() {
     if (!currentPlanId) return;
@@ -677,7 +731,7 @@ async function renderCalendarView() {
             // 「この週のデータが存在する」かつ「状態が FIXED ACTIVE」の場合のみ描画
             const weekShift = shiftData.weeks[i];
 
-            if (state === 'fixed_active' && weekShift || weekShift != null /* ここの条件はテスト用 */ ) {
+            if (state === 'fixed_active' && weekShift /* || weekShift != null  ここの条件はテスト用 */ ) {
                 const dailyShift = weekShift.days[dayIndex];
                 if (dailyShift) {
                     // 午前

@@ -26,6 +26,7 @@ pub enum AppendWeekErrorKind {
 }
 
 impl ShiftCalendarManager {
+
     fn abs_to_index(
         &self, 
         abs_week: AbsWeek
@@ -36,137 +37,6 @@ impl ShiftCalendarManager {
         } else {
             Ok(abs_week - self.base_abs_week)
         }
-    }
-
-    /// すでに作成したリストのなかにtarget_abs_weekを含み
-    /// かつそれが変更される場合はエラーを返却する.
-    ///
-    /// [A | S]
-    ///
-    /// Ok
-    /// ```
-    ///  0  1  2  3  4  5
-    /// [A, S, A, A]       self
-    ///     I  I  I    
-    ///    [S, A, A, N, N] shift you want to append
-    /// target_abs_week: 1
-    /// ```
-    ///
-    /// Err(AttemptedToOverwrite)
-    /// ```
-    ///  0  1  2  3  4  5
-    /// [A, S, A, A] E  E  self
-    ///     I  I  N      
-    ///    [S, A, S, N, N] shift you want to append
-    /// target_abs_week: 1
-    /// ```
-    ///
-    /// if self.timeline[delta_to_abs(initial_delta)..], [0..self.timeline.len() - delta_to_abs(initial_delta)]
-    ///
-    /// Ok
-    /// ```
-    ///  0  1  2  3  4
-    /// [A, S, A, A] E              :self
-    ///              I
-    ///             [S, A, S, N, N] :shift you want to append
-    /// target_abs_week: 4
-    /// ```
-    ///
-    /// Err(NotConsecutiveShifts)
-    /// ```
-    ///  0  1  2  3  4  5
-    /// [A, S, A, A] E  E              :self
-    ///              E [S, A, S, N, N] :shift you want to append
-    /// target_abs_week: 5
-    /// ```
-    /// if self.timeline.len() < target_abs_week -> Error
-    pub fn append_check<I: IntoIterator<Item = bool>>(&self, target_abs_week: AbsWeek, skip_flags: I) 
-    -> Result<(), AppendWeekErrorKind>{
-        if self.timeline.len() + self.base_abs_week < target_abs_week {
-            return Err(AppendWeekErrorKind::NotConsecutiveShifts);
-        }
-
-        if self
-            .timeline[self.abs_to_index(target_abs_week)?..]
-            .iter()
-            .zip(
-                skip_flags
-            ).all(|(week_status, is_skipped)|
-                matches!(week_status, WeekStatus::Skipped) == is_skipped
-            )
-        {
-            // Ok
-        } else {
-            return Err(AppendWeekErrorKind::AttemptedToOverwrite);
-        }
-        Ok(())
-    }
-
-    /// checkをしてOkであればtimelineに適用する
-    /// self.append_check関数のチェックが入る
-    pub fn apply_weeks(
-        &mut self,
-        target_abs_week: AbsWeek,
-        skip_flags: &[(bool, RuleId)]
-    ) -> Result<(), AppendWeekErrorKind> {
-
-        self.append_check(target_abs_week, skip_flags.iter().map(|(a, _)| *a))?; // チェックをする
-
-        // target_abs_week: 2,
-        //  0, 1, 2  3  4  5  <- index
-        // [T, F, F]          <- timeline     .len() -> 3
-        //       [F, T, F, F] <- skip_flags
-        //         [ T, F, F] <- append_skip_flags
-        // 
-        //  let after_timeline_len = target_abs_week (2) + skip_flags.len() (4);
-        //  let append_len = after_timeline_len (6) - self.timeline.len() (3); (3)
-        //  let append_start_index = skip_flags.len() (4) - append_len (3); (1)     // append start index
-        //  let append_skip_flags = [append_start_index..]
-        //  [T, T, T, T]
-        //  [T, T]      
-        //              []
-        //
-        if self.timeline.len() < self.abs_to_index(target_abs_week)? {
-            return Err(AppendWeekErrorKind::UnderFlow);
-        }
-
-        let append_start_index = self.timeline.len() - self.abs_to_index(target_abs_week)?;
-
-        // 重要: indexを超えている場合
-        // 何もしない
-        if skip_flags.len() <= append_start_index {
-            return Ok(());
-        }
-
-        for (is_skipped, rule_id) in &skip_flags[append_start_index..] {
-            self.append_week(*is_skipped, *rule_id);
-        }
-        Ok(())
-    }
-    
-    pub fn append_week(
-        &mut self,
-        is_skipped: bool, rule_id: RuleId
-    ) {
-        // 1. 次のdeltaを計算
-        let next_delta = match self.timeline.last() {
-            Some(WeekStatus::Active { logical_delta, rule_id:_ }) => logical_delta + 1,
-            Some(WeekStatus::Skipped) => {
-                self.find_last_active_delta().map(|d| d + 1).unwrap_or(self.initial_delta)
-            },
-            None => self.initial_delta, // 初回
-        };
-
-        // 2. スロット作成
-        let slot = if is_skipped {
-            WeekStatus::Skipped
-        } else {
-            WeekStatus::Active { 
-                logical_delta: next_delta, rule_id
-            }
-        };
-
-        self.timeline.push(slot);
     }
 
     /// 直近の有効なDeltaを探すヘルパー
@@ -243,17 +113,15 @@ pub fn calculate_partial_shift<'a>(
     timeline_slice
         .iter().map(|i|{
             if let WeekStatus::Active { logical_delta , rule_id} = i {
-                if let Some(week_rule_table) = rule_map.get(rule_id) {
-                    Some(
+                rule_map
+                    .get(rule_id)
+                    .map(|week_rule_table| 
                         gen_one_week_shift(
                             week_rule_table, 
                             staff_group_list,
                             *logical_delta
                         )
                     )
-                } else {
-                    None
-                }
             } else {
                 None
             }

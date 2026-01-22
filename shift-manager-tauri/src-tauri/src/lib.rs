@@ -9,9 +9,9 @@ use std::fs;
 
 use tauri::Manager;
 
-mod domain;
-mod infrastructure;
-mod application;
+pub mod domain;
+pub mod infrastructure;
+pub mod application;
 
 use sqlx::SqlitePool;
 use infrastructure::calendar_repo::CalendarRepository;
