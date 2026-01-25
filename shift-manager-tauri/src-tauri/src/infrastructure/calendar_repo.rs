@@ -76,139 +76,136 @@ impl CalendarRepository {
         Self { pool }
     }
 
-    /// タイムラインを保存（追記）する
-    /// 1件ずつ順番にチェックし、未保存の続きデータであればINSERTする
-    pub async fn save_timeline(
+    /// 新しいシフトカレンダーを作成する
+    /// すでに同じ plan_id のカレンダーが存在する場合はエラーを返す
+    pub async fn create_calendar(
         &self,
         plan_id: i64,
         base_abs_week: usize,
         initial_delta: usize,
-        timeline: &[WeekStatus], // Managerではなく、データ配列そのものを受け取る
+    ) -> Result<i64, String> {
+
+        let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
+
+        // 1. 既存カレンダーのチェック（重複作成の防止）
+        let existing = sqlx::query("SELECT id FROM shift_calendars WHERE plan_id = ?")
+            .bind(plan_id)
+            .fetch_optional(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if let Some(row) = existing {
+            let existing_id: i64 = row.get("id");
+            // 既に存在する場合は、トランザクションをキャンセルしてエラーを返す
+            return Err(format!(
+                "Plan ID: {} のカレンダーは既に存在します (Calendar ID: {})", 
+                plan_id, existing_id
+            ));
+        }
+
+        // 2. 新規カレンダーの挿入 (INSERT)
+        let new_calendar_id = sqlx::query(
+            "INSERT INTO shift_calendars (plan_id, base_abs_week, initial_delta) 
+             VALUES (?, ?, ?)"
+        )
+        .bind(plan_id)
+        .bind(base_abs_week as i64)
+        .bind(initial_delta as i64)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?
+        .last_insert_rowid();
+
+        tx.commit().await.map_err(|e| e.to_string())?;
+
+        // 成功した場合は、新しく作られたIDを返す
+        Ok(new_calendar_id)
+    }
+
+    pub async fn try_to_append_timeline(
+        &self,
+        plan_id: i64,
+        start_abs_week: usize,
+        status_iterator: impl IntoIterator<Item = Option<i64>>,
     ) -> Result<(), String> {
 
         let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
 
-        // 1. 親カレンダーIDの取得 (なければ作成)
-        //    ここもシンプルに「SELECTしてなければINSERT」の流れにします
-        let calendar_id_opt: Option<i64> = sqlx::query("SELECT id FROM shift_calendars WHERE plan_id = ?")
+        // 1. カレンダー情報の取得
+        let cal_row = sqlx::query("SELECT id, base_abs_week FROM shift_calendars WHERE plan_id = ?")
             .bind(plan_id)
-            .fetch_optional(&mut *tx).await.map_err(|e| e.to_string())?
-            .map(|row| row.get("id"));
-
-        let calendar_id = if let Some(id) = calendar_id_opt {
-            id
-        } else {
-            let new_id = sqlx::query("
-                INSERT INTO shift_calendars (plan_id, base_abs_week, initial_delta) 
-                VALUES (?, ?, ?)")
-                .bind(plan_id)
-                .bind(base_abs_week as i64)
-                .bind(initial_delta as i64)
-                .execute(&mut *tx).await.map_err(|e| e.to_string())?
-                .last_insert_rowid();
-            new_id
-        };
-
-        // 2. 現在のDB上の「到達点（最大オフセット）」を取得
-        let row = sqlx::query("SELECT MAX(week_offset) as max_offset FROM weekly_statuses WHERE calendar_id = ?")
-            .bind(calendar_id)
-            .fetch_one(&mut *tx)
+            .fetch_optional(&mut *tx)
             .await
             .map_err(|e| e.to_string())?;
 
-        // ★修正: 明示的に Option<i64> として取得することで、NULLを確実にハンドリングする
-        // try_get("max_offset") で i64 を指定すると、環境によっては NULL が 0 になる恐れがあるため
-        let max_offset_opt: Option<i64> = row.try_get("max_offset").unwrap_or(None);
+        let cal = cal_row.ok_or_else(|| format!("Plan ID: {} のカレンダーが存在しません。", plan_id))?;
+        let calendar_id: i64 = cal.get("id");
+        let base_abs_week: i64 = cal.get("base_abs_week");
 
-        // NULL(None)なら -1、値があればその値を使う
-        let mut current_db_cursor: i64 = max_offset_opt.unwrap_or(-1);
+        // 2. 現在のDBの「末尾（cursor）」と「logical_delta」を取得
+        // DBが空（作成直後）の場合は -1 となる
+        let row = sqlx::query(
+            "SELECT MAX(week_offset) as max_offset, MAX(logical_delta) as max_logical_delta
+             FROM weekly_statuses WHERE calendar_id = ?"
+        )
+        .bind(calendar_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| e.to_string())?;
 
-        // 3. ループ処理: 1件ずつチェックしてINSERT
-        for (index, status) in timeline.iter().enumerate() {
-            let target_offset = index as i64;
+        let current_db_cursor: i64 = row.try_get("max_offset").unwrap_or(None).unwrap_or(-1);
+        let mut local_logical_delta: i64 = row.try_get("max_logical_delta").unwrap_or(None).unwrap_or(-1);
 
-            // 判定: DBのカーソルより先にあるデータだけを入れる
-            // 例: DBに0,1,2がある(cursor=2)。targetが3なら入れる。targetが2なら無視。
-            if target_offset > current_db_cursor {
-                // INSERT実行
-                let (st_type, delta, r_id) = match status {
-                    WeekStatus::Active { logical_delta, rule_id } =>
-                        ("Active", Some(*logical_delta as i64), Some(*rule_id)),
-                    WeekStatus::Skipped =>
-                        ("Skipped", None, None),
-                };
+        // 今回のリストの開始オフセット
+        let start_offset = (start_abs_week as i64) - base_abs_week;
 
-                sqlx::query(
-                    "INSERT INTO weekly_statuses (
-                        calendar_id, 
-                        week_offset, 
-                        status_type, 
-                        logical_delta,
-                        rule_id)
-                    VALUES (?, ?, ?, ?, ?)"
-                )
-                .bind(calendar_id /* calendar_id */)
-                .bind(target_offset/* week_offset */)
-                .bind(st_type/* status_type */)
-                .bind(delta /* logical_delta */)
-                .bind(r_id /* rule_id */)
-                .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        // ====================================================================
+        // ★ バリデーションとスキップ計算
+        // ====================================================================
 
-                // カーソルを進める（これにより、次のループでの連続性が保証される）
-                current_db_cursor = target_offset;
-            } else {
-                // すでにDBにあるので無視 (上書き防止)
-                // continue;
-            }
+        // 【仕様】 歯抜けエラーのチェック
+        // カレンダー作成直後 (cursor=-1) の場合、start_offset は必ず 0 (base_abs_week) でなければエラーになる
+        if start_offset > current_db_cursor + 1 {
+            let missing_week = base_abs_week as i64 + current_db_cursor + 1;
+            return Err(format!(
+                "タイムラインに空きがあります。絶対週 {} からデータを連続させてください。",
+                missing_week
+            ));
         }
 
-        tx.commit().await.map_err(|e| e.to_string())?;
-        Ok(())
-    }
+        // かぶっている要素数を計算
+        let overlap_count = std::cmp::max(0, current_db_cursor - start_offset + 1);
 
-    pub async fn save_calendar(&self, manager: &ShiftCalendarManager) -> Result<(), String> {
-        let mut tx = self.pool.begin().await.map_err(|e| e.to_string())?;
+        // かぶっている分をスキップした新しいイテレータ
+        let new_items = status_iterator.into_iter().skip(overlap_count as usize);
 
-        // 既存削除
-        sqlx::query("DELETE FROM shift_calendars WHERE plan_id = ?")
-            .bind(manager.plan_id)
-            .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+        // 実際の INSERT 開始位置
+        let insert_start_offset = start_offset + overlap_count;
 
-        // 親作成
-        let row_id = sqlx::query("
-            INSERT INTO shift_calendars (
-                plan_id,
-                base_abs_week,
-                initial_delta)
-            VALUES (?, ?, ?)")
-            .bind(manager.plan_id)
-            .bind(manager.base_abs_week as i64)
-            .bind(manager.initial_delta as i64)
-            .execute(&mut *tx).await.map_err(|e| e.to_string())?
-            .last_insert_rowid();
+        // 3. ループ処理：残った未来の要素だけをINSERT
+        for (index, status_opt) in new_items.enumerate() {
+            let target_offset = insert_start_offset + index as i64;
 
-        // 子作成
-        for (index, status) in manager.timeline.iter().enumerate() {
-            let (st_type, delta, r_id) = match status {
-                WeekStatus::Active { logical_delta, rule_id } => ("Active", Some(*logical_delta as i64), Some(*rule_id)),
-                WeekStatus::Skipped => ("Skipped", None, None),
+            let (st_type, delta_to_save, r_id) = match status_opt {
+                Some(rule_id) => {
+                    local_logical_delta += 1;
+                    ("Active", Some(local_logical_delta), Some(rule_id))
+                },
+                None => ("Skipped", None, None),
             };
 
-            sqlx::query("
-                INSERT INTO weekly_statuses (
-                    calendar_id,
-                    week_offset,
-                    status_type,
-                    logical_delta,
-                    rule_id
-                )
-                VALUES (?, ?, ?, ?, ?)")
-                .bind(row_id)
-                .bind(index as i64)
-                .bind(st_type)
-                .bind(delta)
-                .bind(r_id)
-                .execute(&mut *tx).await.map_err(|e| e.to_string())?;
+            sqlx::query(
+                "INSERT INTO weekly_statuses (calendar_id, week_offset, status_type, logical_delta, rule_id)
+                 VALUES (?, ?, ?, ?, ?)"
+            )
+            .bind(calendar_id)
+            .bind(target_offset)
+            .bind(st_type)
+            .bind(delta_to_save)
+            .bind(r_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| e.to_string())?;
         }
 
         tx.commit().await.map_err(|e| e.to_string())?;
@@ -367,6 +364,79 @@ impl CalendarRepository {
         }
 
         Ok(result)
+    }
+
+    /// デバッグ用：指定したプランのタイムラインデータをDBから取得して表示する
+    pub async fn debug_print_timeline(&self, plan_id: i64) -> Result<(), String> {
+        let mut conn = self.pool.acquire().await.map_err(|e| e.to_string())?;
+
+        // 1. まずカレンダーの基本情報を取得
+        let cal_row = sqlx::query(
+            "SELECT id, base_abs_week FROM shift_calendars WHERE plan_id = ?"
+        )
+        .bind(plan_id)
+        .fetch_optional(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        // カレンダーが存在しない場合は終了
+        let cal_row = match cal_row {
+            Some(row) => row,
+            None => {
+                println!("--- [DEBUG] Plan ID: {} のカレンダーは見つかりませんでした ---", plan_id);
+                return Ok(());
+            }
+        };
+
+        let calendar_id: i64 = cal_row.get("id");
+        let base_abs_week: i64 = cal_row.get("base_abs_week");
+
+        println!("--- [DEBUG] Timeline for Plan ID: {} (Calendar ID: {}) ---", plan_id, calendar_id);
+        println!("基準絶対週 (base_abs_week): {}", base_abs_week);
+        println!("---------------------------------------------------------------");
+        println!("| Offset | Absolute Week | Status  | Logical Delta | Rule ID  |");
+        println!("---------------------------------------------------------------");
+
+        // 2. タイムライン(weekly_statuses)を offset 順に取得
+        let status_rows = sqlx::query(
+            "SELECT week_offset, status_type, logical_delta, rule_id
+             FROM weekly_statuses
+             WHERE calendar_id = ?
+             ORDER BY week_offset ASC"
+        )
+        .bind(calendar_id)
+        .fetch_all(&mut *conn)
+        .await
+        .map_err(|e| e.to_string())?;
+
+        if status_rows.is_empty() {
+            println!("| (データなし)                                                |");
+        } else {
+            // 3. 取得したデータを1行ずつ表示
+            for row in status_rows {
+                let offset: i64 = row.get("week_offset");
+                let status_type: String = row.get("status_type");
+
+                // NULLになり得るカラムは Option で取得
+                let logical_delta: Option<i64> = row.try_get("logical_delta").unwrap_or(None);
+                let rule_id: Option<i64> = row.try_get("rule_id").unwrap_or(None);
+
+                // 絶対週の計算 (base + offset)
+                let abs_week = base_abs_week + offset;
+
+                // 見やすくフォーマット
+                let delta_str = logical_delta.map_or("-".to_string(), |v| v.to_string());
+                let rule_str = rule_id.map_or("-".to_string(), |v| v.to_string());
+
+                println!(
+                    "| {:<6} | {:<13} | {:<7} | {:<13} | {:<8} |",
+                    offset, abs_week, status_type, delta_str, rule_str
+                );
+            }
+        }
+        println!("---------------------------------------------------------------");
+
+        Ok(())
     }
 }
 

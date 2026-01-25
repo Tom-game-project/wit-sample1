@@ -81,10 +81,6 @@ pub async fn delete_assignment(assignment_id: i64, repo: State<'_, AppServices>)
 }
 
 // --- Calendar ---
-#[tauri::command]
-pub async fn save_calendar_state(manager: ShiftCalendarManager, repo: State<'_, AppServices>) -> Result<(), String> {
-    repo.calendar.save_calendar(&manager).await
-}
 
 #[tauri::command]
 pub async fn get_calendar_state(plan_id: i64, repo: State<'_, AppServices>) -> Result<Option<ShiftCalendarManager>, String> {

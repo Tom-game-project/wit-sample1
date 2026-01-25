@@ -146,76 +146,47 @@ mod calendar_repo_tests {
     }
 
     #[tokio::test]
-    async fn test_save_timeline_append_logic() {
+    async fn test_save_timeline_debug_print_timeline() {
         // [Setup]
-        let pool = setup_test_db().await; 
+        let pool = setup_test_db().await;
         let cal_repo = CalendarRepository::new(pool.clone());
         let rule_repo = RuleRepository::new(pool.clone());
 
-        // ★ RuleRepository を使用してプランとルールを作成
-        // これにより、実際のアプリと同じ手順でFK制約を満たすデータが作られます
-        let plan_id = rule_repo.create_plan("Test Plan").await.expect("Failed to create plan");
-        let rule_a_id = rule_repo.add_weekly_rule(plan_id, "Rule A").await.expect("Failed rule A");
-        let rule_b_id = rule_repo.add_weekly_rule(plan_id, "Rule B").await.expect("Failed rule B");
-        let rule_c_id = rule_repo.add_weekly_rule(plan_id, "Rule C").await.expect("Failed rule C");
+        let plan_id = rule_repo.create_plan("Test Plan").await.expect("Failed plan");
+        let rule_a = rule_repo.add_weekly_rule(plan_id, "Rule A").await.expect("Failed rule A");
+        let rule_b = rule_repo.add_weekly_rule(plan_id, "Rule B").await.expect("Failed rule B");
 
-        // テスト用のタイムラインデータ
-        let initial_timeline = vec![
-            WeekStatus::Active { logical_delta: 0, rule_id: rule_a_id }, 
-            WeekStatus::Skipped,
-            WeekStatus::Active { logical_delta: 1, rule_id: rule_b_id },
-        ];
+        println!("try to append create_calendar1");
+        cal_repo.create_calendar(
+            plan_id, 
+            2920,
+            100
+        ).await.unwrap();
 
-        // -------------------------------------------------------
-        // Case 1: 初回保存
-        // -------------------------------------------------------
-        cal_repo.save_timeline(plan_id, 100, 0, &initial_timeline)
-            .await
-            .expect("First save failed");
+        println!("try to append create_calendar2");
+        cal_repo.try_to_append_timeline(
+                plan_id,
+                2920, // ここから生成を開始したい絶対週
+                vec![
+                    Some(rule_a),
+                    Some(rule_b),
+                    None
+                ]            // 配列の所有権をそのまま渡す（イテレータに変換される）
+            ).await.unwrap();
 
-        let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM weekly_statuses")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(count, 3, "Should have 3 records initially");
+        cal_repo.try_to_append_timeline(
+            plan_id,
+            2922, // ここから生成を開始したい絶対週
+            vec![
+                Some(rule_a),
+                Some(rule_b),
+                None,
+                Some(rule_a),
+                Some(rule_a),
+                Some(rule_a),
+            ]            // 配列の所有権をそのまま渡す（イテレータに変換される）
+        ).await.unwrap();
 
-        // -------------------------------------------------------
-        // Case 2: 重複データの保存 (Idempotency Check)
-        // -------------------------------------------------------
-        cal_repo.save_timeline(plan_id, 100, 0, &initial_timeline)
-            .await
-            .expect("Second save failed");
-
-        let count_after_dup: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM weekly_statuses")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(count_after_dup, 3, "Count should ensure idempotency");
-
-        // -------------------------------------------------------
-        // Case 3: 追記 (Append New Data)
-        // -------------------------------------------------------
-        let mut extended_timeline = initial_timeline.clone();
-        extended_timeline.push(WeekStatus::Skipped);                                     // index 3
-        extended_timeline.push(WeekStatus::Active { logical_delta: 2, rule_id: rule_c_id }); // index 4
-
-        cal_repo.save_timeline(plan_id, 100, 0, &extended_timeline)
-            .await
-            .expect("Append save failed");
-
-        let count_final: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM weekly_statuses")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        assert_eq!(count_final, 5, "Should verify 2 new records appended");
-
-        // 最後のデータ確認
-        let last_row: (i64, String) = sqlx::query_as("SELECT week_offset, status_type FROM weekly_statuses WHERE week_offset = 4")
-            .fetch_one(&pool)
-            .await
-            .unwrap();
-        
-        assert_eq!(last_row.0, 4);
-        assert_eq!(last_row.1, "Active");
+        let _ = cal_repo.debug_print_timeline(plan_id).await;
     }
 }

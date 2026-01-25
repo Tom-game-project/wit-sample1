@@ -112,7 +112,6 @@ pub fn run() {
             application::commands::update_rule_name,
             application::commands::add_rule_assignment,
             application::commands::delete_assignment,
-            application::commands::save_calendar_state,
             application::commands::get_calendar_state,
             application::commands::derive_monthly_shift,
         ])
