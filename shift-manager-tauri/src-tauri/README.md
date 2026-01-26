@@ -16,3 +16,9 @@ cargo sqlx migrate add <new migration name>
 ,alter_sort_order_type,sort_order の型を変更
 インデックス,add_index_to_plans_name,検索用にインデックスを貼る
 削除,drop_old_calendar_table,古いテーブルを削除
+
+# testing
+
+```sh
+cargo tauri dev
+```

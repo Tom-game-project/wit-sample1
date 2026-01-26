@@ -87,7 +87,6 @@ pub fn run() {
 
                 let services = AppServices::new(pool);
 
-                // ★ここで登録！
                 // --- State に登録 ---
                 app.manage(services);
             });
