@@ -1,4 +1,8 @@
+use std::collections::HashMap;
+
 use tauri::State;
+use crate::application::time::{calculate_abs_week, calculate_weeks_in_month};
+use crate::domain::calendar_logic::calculate_partial_shift;
 use crate::domain::{rule_model::*, shift_calendar_model::*};
 use crate::AppServices;
 
@@ -102,6 +106,92 @@ pub async fn append_timeline(plan_id: i64, start_abs_week: usize, statuses: Vec<
 
 use crate::application::dto::{MonthlyShiftResult, WeeklyShiftDto, DailyShiftDto};
 
+use shift_calendar::shift_gen::{DayRule, Incomplete, ShiftHoll, StaffGroup, StaffGroupList, WeekRule, WeekRuleTable};
+
+/// ====================================================================
+/// 1. StaffGroupList の構築と、IDマップの作成
+/// ====================================================================
+// 戻り値をタプルにし、マップも一緒に返すように変更
+fn db2staff_group_domain(plan_config: &PlanConfig) -> (StaffGroupList, HashMap<i64, usize>) {
+    let mut domain_groups = StaffGroupList::new();
+    let mut group_id_map = HashMap::new(); // ★追加: DBのIDとインデックスの対応表
+
+    for group_row in &plan_config.groups {
+        let mut domain_members = StaffGroup::new(&group_row.group.name);
+        for member_row in &group_row.members {
+            // DBのメンバー情報をドメインの Staff 型に変換
+            domain_members.add_staff(&member_row.name);
+        }
+
+        // ★追加: DBのグループIDが、これから何番目(インデックス)に入るかを記憶する
+        let current_index = domain_groups.0.len();
+        group_id_map.insert(group_row.group.id, current_index);
+
+        domain_groups.add_staff_group(domain_members);
+    }
+    return (domain_groups, group_id_map); // 両方を返す
+}
+
+/// ====================================================================
+/// 2. ルール辞書 (HashMap) の構築
+/// ====================================================================
+// 引数に group_id_map を追加
+fn db2rule_domain<'a>(
+    plan_config: &PlanConfig,
+    group_id_map: &HashMap<i64, usize>
+) -> HashMap<i64, WeekRuleTable<'a, Incomplete>> {
+    let mut rule_dict: HashMap<i64, WeekRuleTable<'_, Incomplete>> = HashMap::new();
+
+    for rule_row in &plan_config.rules {
+        let rule_id = rule_row.rule.id;
+        let mut week_table = WeekRuleTable::new();
+
+        let mut days:[DayRule<'_, Incomplete>; 7] = core::array::from_fn(|_| DayRule {
+            shift_morning: Vec::new(),
+            shift_afternoon: Vec::new(),
+        });
+
+        for assign in &rule_row.assignments {
+            let week_day = assign.weekday;
+            let shift_time = assign.shift_time_type;
+
+            let day = match week_day {
+                Weekday::Monday    => &mut days[0],
+                Weekday::Tuesday   => &mut days[1],
+                Weekday::Wednesday => &mut days[2],
+                Weekday::Thursday  => &mut days[3],
+                Weekday::Friday    => &mut days[4],
+                Weekday::Saturday  => &mut days[5],
+                Weekday::Sunday    => &mut days[6],
+            };
+
+            // ★修正: 危険な `- 1` をやめ、マップから安全にインデックスを取得する
+            let group_index = *group_id_map.get(&assign.target_group_id)
+                .expect("DBの整合性エラー：存在しないグループIDがアサインされています");
+
+            match shift_time {
+                ShiftTime::Morning =>
+                    day.shift_morning.push(
+                        ShiftHoll::new(
+                            group_index, // ★取得した安全なインデックスを使う
+                            assign.target_member_index as usize,
+                        )
+                    ),
+                ShiftTime::Afternoon =>
+                    day.shift_afternoon.push(
+                        ShiftHoll::new(
+                            group_index, // ★ここも同じ
+                            assign.target_member_index as usize,
+                        )
+                    ),
+            }
+        }
+        week_table.add_week_rule(WeekRule(days));
+        rule_dict.insert(rule_id, week_table);
+    }
+    rule_dict
+}
+
 /// 週ごとのシフト導出計算をします
 #[tauri::command]
 pub async fn derive_monthly_shift(
@@ -113,85 +203,72 @@ pub async fn derive_monthly_shift(
     // 1. カレンダーManager（タイムライン）を取得
     let manager_opt = repo.calendar.find_by_plan_id(plan_id).await?;
 
-    // let manager = match manager_opt {
-    //     Some(m) => m,
-    //     None => return Ok(MonthlyShiftResult { weeks: vec![] }), // データなし
-    // };
+    let calendar = match manager_opt {
+        Some(m) => m,
+        None => return Ok(MonthlyShiftResult { weeks: vec![] }), // データなし
+    };
+
+    // ★ ここでカレンダーIDと基準週を取り出します
+    let calendar_id = if let Some(cal_id) = calendar.id {
+        cal_id
+    } else {
+        return Err(String::from("カレンダーを作成してください"))
+    };
+
+    let base_abs_week = calendar.base_abs_week as usize; // 型がusizeの場合はキャスト
 
     // 2. 計算に必要な「辞書データ」をDBから全取得して構築
     //    (本来はRepositoryにこの変換ロジックを持たせるのが綺麗ですが、ここでやります)
     let plan_config = repo.rule.get_plan_config(plan_id).await?;
 
-    // --- ドメインオブジェクトへの変換 (簡易実装) ---
-    // ※ ユーザー様のドメイン型定義に合わせて調整が必要です
-    // ここでは概念的な変換を示します
+    let start_week_abs = if let Some (week_abs) = calculate_abs_week(target_year, target_month, 1) {
+        week_abs
+    } else {
+        return Err(String::from("base abs の計算に失敗しました"));
+    };
 
-    // A. StaffGroupList の構築
-    // let staff_group_list = StaffGroupList::from_config(&plan_config);
-    // といった変換が必要です。ここではロジックに渡せる形になっていると仮定します。
-    // (実際にはルールロジック内でID解決するために必要)
+    let range = calculate_weeks_in_month(target_year, target_month); // カレンダーは最大6週表示
 
-    // B. RuleMap の構築
-    // let rule_map: HashMap<RuleId, WeekRuleTable> = ...;
-    // plan_config.rules を回して、ドメインモデルの WeekRuleTable に変換します。
+    let start_offset = start_week_abs - base_abs_week;
 
+    let week_status_list = repo.calendar.fetch_status_range(
+        calendar_id,
+        start_offset as i64,
+        range as i64).await?;
 
-    // 3. 計算対象の期間を特定
-    //    JS側の calculateCalendarDates とロジックを合わせる必要があります。
-    //    ここでは「該当月の1日が含まれる週」を特定し、そこから6週間分取得すると仮定します。
+    // databaseをドメインロジック向けに編集する
 
-    // 簡易計算: (ターゲット年月 - 基準日) / 7日 で絶対週を出すロジックが必要
-    // 今回はデモとして「managerの先頭から表示する」あるいは「start_week_abs」を計算して渡します。
-    // let start_week_abs =  calculate_abs_week(target_year, target_month, manager.base_abs_week);
-    let start_week_abs = 1;
-    let range = 6; // カレンダーは最大6週表示
+    // 1. DBからドメインへの変換と、IDマップの取得
+    let (domain_groups, group_id_map) = db2staff_group_domain(&plan_config); 
 
-    // 4. ロジック実行！ (ユーザー様の自作関数)
-    // ※ ここで rule_map, staff_group_list を渡す
-    // let domain_result = manager.derive_shift(
-    //    &rule_map,
-    //    &staff_group_list,
-    //    start_week_abs,
-    //    range
-    // );
+    // 2. マップを使ってルールを変換
+    let rule_dict = db2rule_domain(&plan_config, &group_id_map);
 
-    // 5. 結果を DTO に変換 (ここが重要)
-    //    ドメイン層の型を、JSON用の型(Stringのリスト)に焼き直します
-    // let mut result_weeks = Vec::new();
+    // 3. コアロジック実行
+    let partial_shift = calculate_partial_shift(&week_status_list, &rule_dict, &domain_groups);
 
-    // for domain_week in domain_result {
-    //     match domain_week {
-    //         Some(week) => {
-    //             let mut days_dto = Vec::new();
-    //             for day_idx in 0..7 {
-    //                  // weekの中から day_idx のシフトを取り出し、名前リストにする
-    //                  let morning_names = week.get_assigned_names(day_idx, 0); // 仮定のメソッド
-    //                  let afternoon_names = week.get_assigned_names(day_idx, 1);
-    //                  days_dto.push(DailyShiftDto { morning: morning_names, afternoon: afternoon_names });
-    //             }
-    //             result_weeks.push(Some(WeeklyShiftDto { days: days_dto }));
-    //         },
-    //         None => result_weeks.push(None), // Skipまたは範囲外
-    //     }
-    // }
+    let dto_weeks: Vec<Option<WeeklyShiftDto>> = partial_shift
+        .into_iter()
+        .map(|week_opt| {
+            // 週データが存在する(Some)場合だけ、中身を変換する
+            week_opt.map(|week| {
 
-    // ★まだロジック結合前なので、ダミーデータを返してUIテストできるようにします
-    // (これを実装すれば、UI側の準備が進められます)
-    // ---------------------------------------------------
-    let mut dummy_weeks = Vec::new();
-    for _ in 0..6 {
-        let mut days = Vec::new();
-        for _ in 0..7 {
-            days.push(DailyShiftDto {
-                morning: vec!["Staff A".to_string()],
-                afternoon: vec!["Staff B".to_string(), "Staff C".to_string()],
-            });
-        }
-        dummy_weeks.push(Some(WeeklyShiftDto { days }));
-    }
-    // ---------------------------------------------------
+                // 1週間分(7日)のデータをループして DailyShiftDto の Vec を作る
+                let days_dto: Vec<DailyShiftDto> = week.0
+                    .into_iter()
+                    .map(|day| DailyShiftDto {
+                        morning: day.shift_morning.iter().map(|t| t.name.clone()).collect(),
+                        afternoon: day.shift_afternoon.iter().map(|t| t.name.clone()).collect(),
+                    })
+                    .collect();
 
-    Ok(MonthlyShiftResult { weeks: dummy_weeks })
+                // WeeklyShiftDto に詰める
+                WeeklyShiftDto { days: days_dto }
+            })
+        })
+        .collect();
+
+    Ok(MonthlyShiftResult { weeks: dto_weeks })
 }
 
 

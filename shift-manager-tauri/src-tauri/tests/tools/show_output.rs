@@ -60,7 +60,7 @@ pub fn show_plan_config_debug_data(config: &PlanConfig) {
     for rule in &config.rules {
         println!("📅 ルール: {} (ID: {})", rule.rule.name, rule.rule.id);
         for assign in &rule.assignments {
-            println!("   ┣ アサイン: 曜日[{}] 時間[{}] -> グループID[{}]のメンバー[{}]",
+            println!("   ┣ アサイン: 曜日[{:?}] 時間[{:?}] -> グループID[{}]のメンバー[{}]",
                 assign.weekday, assign.shift_time_type, assign.target_group_id, assign.target_member_index);
         }
     }

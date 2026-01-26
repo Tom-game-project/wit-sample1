@@ -36,7 +36,7 @@ pub fn calculate_weeks_in_month(year: i32, month: u32) -> u32 {
 }
 
 /// ヘルパー: 年月から絶対週番号を計算する (JS側と合わせる必要あり)
-fn calculate_abs_week(year: i32, month: u32, day: u32) -> Option<AbsWeek>  {
+pub fn calculate_abs_week(year: i32, month: u32, day: u32) -> Option<AbsWeek>  {
     //     January 1970
     //          unix base
     //          v
