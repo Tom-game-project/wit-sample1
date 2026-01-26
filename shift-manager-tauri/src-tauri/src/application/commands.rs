@@ -87,7 +87,19 @@ pub async fn get_calendar_state(plan_id: i64, repo: State<'_, AppServices>) -> R
     repo.calendar.find_by_plan_id(plan_id).await
 }
 
-use std::collections::HashMap;
+// --- Calendar ---
+#[tauri::command]
+pub async fn create_calendar(plan_id: i64, base_abs_week: usize, initial_delta: usize, repo: State<'_, AppServices>) -> Result<i64, String> {
+    // Repository側の create_calendar を呼び出す
+    repo.calendar.create_calendar(plan_id, base_abs_week, initial_delta).await
+}
+
+#[tauri::command]
+pub async fn append_timeline(plan_id: i64, start_abs_week: usize, statuses: Vec<Option<i64>>, repo: State<'_, AppServices>) -> Result<(), String> {
+    // Repository側の try_to_append_timeline を呼び出す
+    repo.calendar.try_to_append_timeline(plan_id, start_abs_week, statuses).await
+}
+
 use crate::application::dto::{MonthlyShiftResult, WeeklyShiftDto, DailyShiftDto};
 
 /// 週ごとのシフト導出計算をします
@@ -182,43 +194,4 @@ pub async fn derive_monthly_shift(
     Ok(MonthlyShiftResult { weeks: dummy_weeks })
 }
 
-use chrono::{NaiveDate, Duration};
 
-// ヘルパー: 年月から絶対週番号を計算する (JS側と合わせる必要あり)
-fn calculate_abs_week(year: i32, month: u32, day: u32) -> Option<AbsWeek>  {
-    //     January 1970
-    //          unix base
-    //          v
-    // Mo Tu We Th Fr Sa Su
-    //           1  2  3  4 < base week = 0
-    //  5  6  7  8  9 10 11               1
-    // 12 13 14 15 16 17 18               2
-    // 19 20 21 22 23 24 25               :
-    // 26 27 28 29 30 31
-    //
-    // 1969/12/29 as week base
-
-    // (unix_base_week: number,week_delta:  number)  Mo Tu We Th Fr Sa Su
-    // (unix_base_week: 0,week_delta:            0)           1  2  3  4
-    // (unix_base_week: 1,week_delta:            1)  5  6  7  8  9 10 11
-    // (unix_base_week: 2,week_delta:         skip) 12 13 14 15 16 17 18
-    // (unix_base_week: 3,week_delta:            2) 19 20 21 22 23 24 25
-    // (unix_base_week: 4,week_delta:            3) 26 27 28 29 30 31
-
-    let date1 = NaiveDate::from_ymd_opt(1969, 12, 29)
-        .unwrap() /* safe unwrap */;
-
-    if let Some(date2)  = NaiveDate::from_ymd_opt(year, month + 1, day) {
-        let diff: Duration = date2 - date1;
-        let weeks = diff.num_weeks();
-
-        if weeks < 0 {
-            None
-        } else {
-            Some(weeks as usize) 
-        }
-        
-    } else {
-        None
-    }
-}

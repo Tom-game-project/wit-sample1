@@ -98,6 +98,13 @@ impl ShiftCalendarManager {
     }
 }
 
+// derive_shiftを更にラップしてjsが使いやすい関数にする
+
+
+
+
+
+
 use std::collections::HashMap;
 
 /// 指定された期間のシフトのみを計算する純粋関数
